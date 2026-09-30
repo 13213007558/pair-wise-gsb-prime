@@ -180,6 +180,23 @@ class Prime
 
   # <!--
   #   rdoc-file=lib/prime.rb
+  #   - square_roots(a, mod, generator = Prime::Generator23.new)
+  # -->
+  # Returns an Enumerator over all roots of x**2 ≡ a (mod m).
+  #
+  def self.square_roots: (Integer a, Integer mod, ?PseudoPrimeGenerator generator) { (Integer) -> void } -> Integer
+                   | (Integer a, Integer mod, ?PseudoPrimeGenerator generator) -> Enumerator[Integer, void]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - square_root_count(a, mod, generator = Prime::Generator23.new)
+  # -->
+  # Returns the number of roots of x**2 ≡ a (mod m).
+  #
+  def self.square_root_count: (Integer a, Integer mod, ?PseudoPrimeGenerator generator) -> Integer
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
   #   - prime?(value, generator = Prime::Generator23.new)
   # -->
   # Returns true if `value` is a prime number, else returns false. Integer#prime?
@@ -193,6 +210,23 @@ class Prime
   # :   optional. A pseudo-prime generator.
   #
   def prime?: (Integer value, ?PseudoPrimeGenerator generator) -> bool
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - square_roots(a, mod, generator = Prime::Generator23.new)
+  # -->
+  # Returns an Enumerator over all roots of x**2 ≡ a (mod m).
+  #
+  def square_roots: (Integer a, Integer mod, ?PseudoPrimeGenerator generator) { (Integer) -> void } -> Integer
+               | (Integer a, Integer mod, ?PseudoPrimeGenerator generator) -> Enumerator[Integer, void]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - square_root_count(a, mod, generator = Prime::Generator23.new)
+  # -->
+  # Returns the number of roots of x**2 ≡ a (mod m).
+  #
+  def square_root_count: (Integer a, Integer mod, ?PseudoPrimeGenerator generator) -> Integer
 
   # <!--
   #   rdoc-file=lib/prime.rb

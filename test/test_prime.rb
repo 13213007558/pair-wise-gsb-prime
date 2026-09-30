@@ -147,6 +147,115 @@ class TestPrime < Test::Unit::TestCase
     assert_equal Prime.prime?(4), false
   end
 
+  def test_square_roots_small_moduli
+    1.upto(200) do |modulus|
+      expected = Array.new(modulus) { [] }
+      modulus.times do |x|
+        expected[(x * x) % modulus] << x
+      end
+
+      modulus.times do |a|
+        roots = Prime.square_roots(a, modulus)
+        actual = roots.to_a
+        assert_equal expected[a], actual.sort
+        assert_equal actual, actual.uniq
+        assert_equal expected[a].size, roots.size
+        assert_equal expected[a].size, Prime.square_root_count(a, modulus)
+        actual.each do |root|
+          assert_equal a, (root * root) % modulus
+          assert_send [root, :<, modulus]
+          assert_send [root, :>=, 0]
+        end
+      end
+    end
+  end
+
+  def test_square_roots_special_cases
+    assert_equal [0], Prime.square_roots(0, 1).to_a
+    assert_equal 1, Prime.square_roots(0, 1).size
+    assert_equal [], Prime.square_roots(2, 4).to_a
+    assert_equal 0, Prime.square_root_count(2, 4)
+    assert_equal [1, 3, 5, 7], Prime.square_roots(1, 8).to_a.sort
+    assert_equal [2, 6], Prime.square_roots(4, 8).to_a.sort
+    assert_equal [3, 6, 12, 15, 21, 24], Prime.square_roots(9, 27).to_a.sort
+  end
+
+  def test_square_roots_normalizes_a
+    roots = Prime.square_roots(-5, 9).to_a
+    assert_equal [2, 7], roots.sort
+    roots.each { |root| assert_equal(-5 % 9, (root * root) % 9) }
+  end
+
+  def test_square_roots_with_block
+    yielded = []
+    count = Prime.square_roots(1, 8) { |root| yielded << root }
+    assert_equal [1, 3, 5, 7], yielded.sort
+    assert_equal 4, count
+  end
+
+  def test_square_roots_arguments
+    assert_raise(ArgumentError) { Prime.square_roots(1.0, 8) }
+    assert_raise(ArgumentError) { Prime.square_roots(1, 0) }
+    assert_raise(ArgumentError) { Prime.square_roots(1, -8) }
+    assert_equal Prime.square_roots(1, 8).to_a,
+                 Prime.modular_square_roots(1, 8).to_a
+  end
+
+  def test_square_roots_are_lazy
+    modulus = Prime.first(100).inject(:*)
+    roots = Prime.square_roots(1, modulus)
+    assert_equal 2 ** 99, roots.size
+    first_five = roots.first(5)
+    assert_equal 5, first_five.size
+    first_five.each do |root|
+      assert_equal 1, (root * root) % modulus
+      assert_send [root, :<, modulus]
+    end
+    assert_equal first_five, roots.first(5)
+  end
+
+  def test_square_roots_large_prime_powers
+    prime = 1000003
+    roots = Prime.square_roots(1, prime ** 7)
+    assert_equal 2, roots.size
+    roots.each { |root| assert_equal 1, (root * root) % (prime ** 7) }
+
+    nonunit_roots = Prime.square_roots(prime ** 2, prime ** 5)
+    assert_equal 2 * prime, nonunit_roots.size
+    nonunit_roots.first(20).each do |root|
+      assert_equal(prime ** 2, (root * root) % (prime ** 5))
+    end
+
+    smaller_prime = 13
+    roots_by_formula = 2 * smaller_prime ** 2
+    smaller_roots = Prime.square_roots(smaller_prime ** 4, smaller_prime ** 7)
+    assert_equal roots_by_formula, smaller_roots.size
+    assert_equal roots_by_formula, smaller_roots.to_a.uniq.size
+    smaller_roots.each do |root|
+      assert_equal smaller_prime ** 4, (root * root) % (smaller_prime ** 7)
+    end
+
+    power_of_two = 2 ** 60
+    zero_roots = Prime.square_roots(0, power_of_two)
+    assert_equal 2 ** 30, zero_roots.size
+    zero_roots.first(20).each do |root|
+      assert_equal 0, (root * root) % power_of_two
+    end
+
+    two_power_roots = Prime.square_roots(2 ** 4, power_of_two)
+    assert_equal 2 ** 4, two_power_roots.size
+    two_power_roots.each do |root|
+      assert_equal(2 ** 4, (root * root) % power_of_two)
+    end
+
+    smaller_two_power_roots = Prime.square_roots(2 ** 4, 2 ** 12)
+    assert_equal 2 ** 4, smaller_two_power_roots.size
+    assert_equal 2 ** 4, smaller_two_power_roots.to_a.uniq.size
+    smaller_two_power_roots.each do |root|
+      assert_equal 2 ** 4, (root * root) % (2 ** 12)
+    end
+  end
+
   class TestPseudoPrimeGenerator < Test::Unit::TestCase
     def test_upper_bound
       pseudo_prime_generator = Prime::PseudoPrimeGenerator.new(42)

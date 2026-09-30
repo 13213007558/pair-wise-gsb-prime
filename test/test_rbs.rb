@@ -48,6 +48,18 @@ module RBSTypeTest
                        Prime, :prime?, 57
     end
 
+    def test_square_roots
+      assert_send_type "(::Integer a, ::Integer mod) -> ::Enumerator[::Integer, void]",
+                       Prime, :square_roots, 1, 8
+      assert_send_type "(::Integer a, ::Integer mod) { (::Integer) -> void } -> ::Integer",
+                       Prime, :square_roots, 1, 8, &proc { break_from_block }
+    end
+
+    def test_square_root_count
+      assert_send_type "(::Integer a, ::Integer mod) -> ::Integer",
+                       Prime, :square_root_count, 1, 8
+    end
+
     def test_prime_division
       assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
                        Prime, :prime_division, 57
@@ -94,6 +106,18 @@ module RBSTypeTest
     def test_prime?
       assert_send_type "(::Integer value) -> bool",
                        Prime.instance, :prime?, 57
+    end
+
+    def test_square_roots
+      assert_send_type "(::Integer a, ::Integer mod) -> ::Enumerator[::Integer, void]",
+                       Prime.instance, :square_roots, 1, 8
+      assert_send_type "(::Integer a, ::Integer mod) { (::Integer) -> void } -> ::Integer",
+                       Prime.instance, :square_roots, 1, 8, &proc { break_from_block }
+    end
+
+    def test_square_root_count
+      assert_send_type "(::Integer a, ::Integer mod) -> ::Integer",
+                       Prime.instance, :square_root_count, 1, 8
     end
 
     def test_prime_division

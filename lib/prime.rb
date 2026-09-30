@@ -326,6 +326,291 @@ class Prime
     pv
   end
 
+  # Returns an Enumerator over all integer roots of
+  #
+  #   x**2 ≡ a (mod m).
+  #
+  # Roots are represented by their least nonnegative residue, so every root is
+  # yielded once and all roots are in 0...m.  The returned Enumerator has a
+  # precise #size; it does not build the potentially huge Cartesian product of
+  # the prime-power solutions.  When a block is given, the roots are yielded and
+  # the number of roots is returned.
+  #
+  # +m+ must be a positive Integer.  For +m+ == 1 there is one residue, 0.
+  # If no root exists, the enumerator is empty and its size is 0.
+  #
+  # == Examples
+  #   Prime.square_roots(1, 8).to_a  #=> [1, 3, 5, 7]
+  #   Prime.square_roots(4, 8).size  #=> 2
+  #   Prime.square_roots(2, 4).to_a  #=> []
+  #
+  def square_roots(a, mod, generator = Prime::Generator23.new)
+    raise ArgumentError, "Expected an integer, got #{a}" unless a.respond_to?(:integer?) && a.integer?
+    raise ArgumentError, "Expected a positive integer modulus, got #{mod}" unless mod.respond_to?(:integer?) && mod.integer? && mod > 0
+
+    factorization = prime_division(mod, generator)
+    roots, count = prime_power_square_roots(a, factorization)
+    enumerator = Enumerator.new(count) do |yielder|
+      roots.each { |root| yielder << root }
+    end
+
+    if block_given?
+      enumerator.each { |root| yield root }
+      count
+    else
+      enumerator
+    end
+  end
+  alias modular_square_roots square_roots
+
+  # Returns the number of roots of x**2 ≡ a (mod m).
+  def square_root_count(a, mod, generator = Prime::Generator23.new)
+    square_roots(a, mod, generator).size
+  end
+  alias square_roots_count square_root_count
+
+  private
+
+  def prime_power_square_roots(a, factorization)
+    return [single_root_enumerator(0), 1] if factorization.empty?
+
+    factors = factorization.map do |prime, exponent|
+      local_modulus = prime ** exponent
+      roots, count = if prime == 2
+        two_power_square_roots(a % local_modulus, exponent)
+      else
+        odd_prime_power_square_roots(a % local_modulus, prime, exponent)
+      end
+      return [empty_root_enumerator, 0] if count == 0
+      [local_modulus, roots, count]
+    end
+
+    count = factors.inject(1) { |product, (_, _, local_count)| product * local_count }
+    roots = combine_square_roots(factors)
+    [roots, count]
+  end
+
+  def empty_root_enumerator
+    Enumerator.new(0) {}
+  end
+
+  def single_root_enumerator(root)
+    Enumerator.new(1) { |yielder| yielder << root }
+  end
+
+  def combine_square_roots(factors)
+    Enumerator.new do |yielder|
+      combine_square_roots_recursively(factors, 0, 0, 1, yielder)
+    end
+  end
+
+  def combine_square_roots_recursively(factors, index, root, modulus, yielder)
+    if index == factors.length
+      yielder << root
+      return
+    end
+
+    local_modulus, local_roots, = factors[index]
+    inverse = modular_inverse(modulus, local_modulus)
+    local_roots.each do |local_root|
+      difference = local_root - root
+      coefficient = (difference * inverse) % local_modulus
+      combined = root + modulus * coefficient
+      combine_square_roots_recursively(
+        factors, index + 1, combined, modulus * local_modulus, yielder
+      )
+    end
+  end
+
+  def modular_inverse(number, modulus)
+    return 0 if modulus == 1
+
+    old_r, r = number % modulus, modulus
+    old_s, s = 1, 0
+    while r != 0
+      quotient = old_r / r
+      old_r, r = r, old_r - quotient * r
+      old_s, s = s, old_s - quotient * s
+    end
+    raise ArgumentError, "#{number} has no inverse modulo #{modulus}" unless old_r == 1
+    old_s % modulus
+  end
+
+  def odd_prime_power_square_roots(a, prime, exponent)
+    if a == 0
+      multiplicity = (exponent + 1) / 2
+      step = prime ** multiplicity
+      count = prime ** (exponent - multiplicity)
+      return [multiples_enumerator(0, step, prime ** exponent), count]
+    end
+
+    valuation = 0
+    value = a
+    while value % prime == 0
+      value /= prime
+      valuation += 1
+    end
+
+    if valuation.odd?
+      [empty_root_enumerator, 0]
+    else
+      t = valuation / 2
+      local_modulus = prime ** exponent
+      p_power = prime ** t
+      unit_modulus = prime ** (exponent - valuation)
+      unit_roots = odd_prime_unit_square_roots(value, prime, exponent - valuation)
+      lifted_square_roots(unit_roots, p_power, unit_modulus, local_modulus)
+    end
+  end
+
+  def odd_prime_unit_square_roots(a, prime, exponent)
+    root = tonelli_shanks(a % prime, prime)
+    return empty_root_enumerator if root.nil?
+
+    modulus = prime
+    value = a % modulus
+    (1...exponent).each do
+      next_modulus = modulus * prime
+      value = a % next_modulus
+      coefficient = (((value - root * root) / modulus) * modular_inverse(2 * root, prime)) % prime
+      root += modulus * coefficient
+      modulus = next_modulus
+    end
+
+    roots = [root, (-root) % modulus].uniq.sort
+    array_root_enumerator(roots)
+  end
+
+  def tonelli_shanks(a, prime)
+    return 0 if a == 0
+    return nil if a.pow((prime - 1) / 2, prime) != 1
+    return a % prime if prime == 2
+    return a.pow((prime + 1) / 4, prime) if prime % 4 == 3
+
+    q = prime - 1
+    s = 0
+    while q.even?
+      q /= 2
+      s += 1
+    end
+
+    z = 2
+    z += 1 while z.pow((prime - 1) / 2, prime) == 1
+
+    m = s
+    c = z.pow(q, prime)
+    t = a.pow(q, prime)
+    root = a.pow((q + 1) / 2, prime)
+
+    until t == 1
+      i = 1
+      value = t * t % prime
+      while value != 1
+        value = value * value % prime
+        i += 1
+      end
+      return nil if i == m
+
+      b = c.pow(1 << (m - i - 1), prime)
+      m = i
+      c = b * b % prime
+      t = t * c % prime
+      root = root * b % prime
+    end
+    root
+  end
+
+  def two_power_square_roots(a, exponent)
+    if a == 0
+      multiplicity = (exponent + 1) / 2
+      step = 2 ** multiplicity
+      return [multiples_enumerator(0, step, 2 ** exponent), 2 ** (exponent - multiplicity)]
+    end
+
+    if a.even?
+      valuation = 0
+      value = a
+      while value.even?
+        value /= 2
+        valuation += 1
+      end
+
+      return [empty_root_enumerator, 0] if valuation.odd?
+
+      t = valuation / 2
+      p_power = 2 ** t
+      unit_modulus = 2 ** (exponent - valuation)
+      roots = two_power_unit_square_roots(value, exponent - valuation)
+      return [empty_root_enumerator, 0] if roots.empty?
+
+      lifted_square_roots(array_root_enumerator(roots), p_power, unit_modulus, 2 ** exponent)
+    else
+      roots = two_power_unit_square_roots(a, exponent)
+      [array_root_enumerator(roots), roots.size]
+    end
+  end
+
+  def two_power_unit_square_roots(a, exponent)
+    case exponent
+    when 1
+      [a % 2]
+    when 2
+      a % 4 == 1 ? [1, 3] : []
+    else
+      return [] if a % 8 != 1
+
+      roots = [1, 3, 5, 7].select { |root| root * root % 8 == a % 8 }
+      modulus = 8
+      (4..exponent).each do
+        next_modulus = modulus * 2
+        value = a % next_modulus
+        roots = roots.flat_map do |root|
+          root * root % next_modulus == value ? [root, root + modulus] : []
+        end
+        modulus = next_modulus
+      end
+      roots
+    end
+  end
+
+  def lifted_square_roots(unit_roots, p_power, unit_modulus, local_modulus)
+    roots = Enumerator.new do |yielder|
+      (0...p_power).each do |coefficient|
+        unit_roots.each do |unit_root|
+          root = p_power * (unit_root + coefficient * unit_modulus)
+          yielder << root % local_modulus
+        end
+      end
+    end
+    [roots, unit_roots.size * p_power]
+  end
+
+  def array_root_enumerator(roots)
+    Enumerator.new(roots.size) do |yielder|
+      roots.each { |root| yielder << root }
+    end
+  end
+
+  def multiples_enumerator(first, step, limit)
+    Enumerator.new do |yielder|
+      value = first
+      while value < limit
+        yielder << value
+        value += step
+      end
+    end
+  end
+
+  class << self
+    private :prime_power_square_roots, :empty_root_enumerator,
+            :single_root_enumerator, :combine_square_roots,
+            :combine_square_roots_recursively, :modular_inverse,
+            :odd_prime_power_square_roots, :odd_prime_unit_square_roots,
+            :tonelli_shanks, :two_power_square_roots,
+            :two_power_unit_square_roots, :lifted_square_roots,
+            :array_root_enumerator, :multiples_enumerator
+  end
+
   # An abstract class for enumerating pseudo-prime numbers.
   #
   # Concrete subclasses should override succ, next, rewind.

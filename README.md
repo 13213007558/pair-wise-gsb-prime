@@ -38,6 +38,11 @@ Prime.prime?(7)           #=> true
 Prime.prime_division(8959)                          #=> [[17, 2], [31, 1]]
 Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
+
+# Solve x**2 ≡ a (mod m), including repeated prime factors and powers of 2
+Prime.square_roots(1, 8).to_a                       #=> [1, 3, 5, 7]
+Prime.square_root_count(0, 12)                      #=> 4
+Prime.square_roots(1, 2**100).first(5)              #=> lazily enumerates roots
 ```
 
 ## Contributing
