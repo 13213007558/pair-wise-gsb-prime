@@ -53,6 +53,13 @@ module RBSTypeTest
                        Prime, :prime_division, 57
     end
 
+    def test_discrete_log
+      assert_send_type "(::Integer, ::Integer, ::Integer) -> [::Integer, ::Integer]",
+                       Prime, :discrete_log, 5, 3, 23
+      assert_send_type "(::Integer, ::Integer, ::Integer, max_table_size: ::Integer, max_steps: ::Integer) -> nil",
+                       Prime, :discrete_log, 3, 2, 13, max_table_size: 10, max_steps: 100
+    end
+
     def test_instance
       assert_send_type "() -> ::Prime",
                        Prime, :instance
@@ -99,6 +106,13 @@ module RBSTypeTest
     def test_prime_division
       assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
                        Prime.instance, :prime_division, 57
+    end
+
+    def test_discrete_log
+      assert_send_type "(::Integer, ::Integer, ::Integer) -> [::Integer, ::Integer]",
+                       Prime.instance, :discrete_log, 5, 3, 23
+      assert_send_type "(::Integer, ::Integer, ::Integer, max_table_size: ::Integer, max_steps: ::Integer) -> nil",
+                       Prime.instance, :discrete_log, 3, 2, 13, max_table_size: 10, max_steps: 100
     end
   end
 end

@@ -38,6 +38,12 @@ Prime.prime?(7)           #=> true
 Prime.prime_division(8959)                          #=> [[17, 2], [31, 1]]
 Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
+
+# Discrete logarithm modulo a prime: solve g**x = h (mod p).
+# The base does not need to be a primitive root; the answer is the
+# exponent congruence class modulo the multiplicative order of g.
+Prime.discrete_log(5, 3, 23)   #=> [16, 22]: x = 16 (mod 22), ord(5) == 22
+Prime.discrete_log(3, 2, 13)   #=> nil: 2 is not a power of 3 mod 13
 ```
 
 ## Contributing
