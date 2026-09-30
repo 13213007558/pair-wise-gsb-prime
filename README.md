@@ -38,6 +38,13 @@ Prime.prime?(7)           #=> true
 Prime.prime_division(8959)                          #=> [[17, 2], [31, 1]]
 Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
+
+ # Fast factorization of signed 64-bit integers, with deterministic
+ # primality proofs and a caller-controlled random source and work budget
+ result = Prime.prime_division_int64(3037000493 * 3037000453, random: Random.new(42))
+ result.complete?   #=> true
+ result.to_a        #=> [[3037000453, 1], [3037000493, 1]]
+ Prime.prime_int64?(2**63 - 25)                    #=> true
 ```
 
 ## Contributing

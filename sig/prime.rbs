@@ -50,6 +50,22 @@ class Prime
 
   # <!--
   #   rdoc-file=lib/prime.rb
+  #   - INT64_MIN
+  # -->
+  # The smallest integer for which Prime#prime_int64? and
+  # Prime#prime_division_int64 are guaranteed to work.
+  INT64_MIN: Integer
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - INT64_MAX
+  # -->
+  # The largest integer for which Prime#prime_int64? and
+  # Prime#prime_division_int64 are guaranteed to work.
+  INT64_MAX: Integer
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
   #   - each(ubound = nil, generator = EratosthenesGenerator.new, &block)
   # -->
   # Iterates the given block over all prime numbers.
@@ -269,6 +285,78 @@ class Prime
   #     3**2 * 5                  #=> 45
   #
   def prime_division: (Integer, ?PseudoPrimeGenerator generator) -> Array[[ Integer, Integer ]]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - prime_int64?(value)
+  # -->
+  # Returns true if `value` is a prime number, else returns false.
+  #
+  # `value` must be a signed 64-bit integer
+  # (Prime::INT64_MIN..Prime::INT64_MAX). Within that range the answer is
+  # always exact: it is decided by a deterministic Miller-Rabin test, never
+  # by a probabilistic one.
+  def self.prime_int64?: (Integer value) -> bool
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - prime_int64?(value)
+  # -->
+  def prime_int64?: (Integer value) -> bool
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - prime_division_int64(value, random: Random.new, budget: 1_000_000)
+  # -->
+  # Returns the factorization of `value`, which must be a signed 64-bit
+  # integer (Prime::INT64_MIN..Prime::INT64_MAX), as a
+  # Prime::Int64Factorization carrying the proven prime factors and the
+  # unfactored remainder.
+  def self.prime_division_int64: (Integer value, ?random: Random random, ?budget: Integer budget) -> Int64Factorization
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - prime_division_int64(value, random: Random.new, budget: 1_000_000)
+  # -->
+  def prime_division_int64: (Integer value, ?random: Random random, ?budget: Integer budget) -> Int64Factorization
+
+  # <!-- rdoc-file=lib/prime.rb -->
+  # The result of Prime#prime_division_int64.
+  #
+  # It carries the proven prime factors of the requested value and, when the
+  # work budget was exhausted before the factorization was complete, the
+  # unfactored remainder.
+  #
+  class Int64Factorization
+    include Enumerable[[ Integer, Integer ]]
+
+    # The proven prime factors, as an array of `[prime, exponent]` pairs
+    # sorted by prime, in the same format as Prime#prime_division.
+    attr_reader factors: Array[[ Integer, Integer ]]
+
+    # The cofactor that was not decomposed into primes, 1 when the
+    # factorization is complete.
+    attr_reader remainder: Integer
+
+    def initialize: (Array[[ Integer, Integer ]] factors, Integer remainder) -> void
+
+    # Returns true if the factorization is complete.
+    def complete?: () -> bool
+
+    # Iterates over the proven `[prime, exponent]` pairs.
+    def each: () { ([ Integer, Integer ]) -> void } -> void
+             | () -> Enumerator[[ Integer, Integer ], void]
+
+    # Returns the proven prime factors as an array of `[prime, exponent]`
+    # pairs, compatible with Prime#prime_division.
+    def to_a: () -> Array[[ Integer, Integer ]]
+
+    # Returns the factorized value, i.e. the product of the proven factors
+    # and the remainder.
+    def to_i: () -> Integer
+
+    def ==: (untyped other) -> bool
+  end
 
   # Returns the singleton instance.
   #

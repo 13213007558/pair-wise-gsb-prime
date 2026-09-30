@@ -30,6 +30,14 @@ class Integer
     Prime.prime_division(self, generator)
   end
 
+  # Returns the factorization of +self+, which must be a signed 64-bit
+  # integer.
+  #
+  # See Prime#prime_division_int64 for more details.
+  def prime_division_int64(random: Random.new, budget: 1_000_000)
+    Prime.prime_division_int64(self, random: random, budget: budget)
+  end
+
   # Returns true if +self+ is a prime number, else returns false.
   # Not recommended for very big integers (> 10**23).
   def prime?
@@ -170,6 +178,14 @@ end
 class Prime
 
   VERSION = "0.1.4"
+
+  # The smallest integer for which Prime#prime_int64? and
+  # Prime#prime_division_int64 are guaranteed to work.
+  INT64_MIN = -(2**63)
+
+  # The largest integer for which Prime#prime_int64? and
+  # Prime#prime_division_int64 are guaranteed to work.
+  INT64_MAX = 2**63 - 1
 
   include Enumerable
   include Singleton
@@ -324,6 +340,332 @@ class Prime
       pv.push [value, 1]
     end
     pv
+  end
+
+  # Returns true if +value+ is a prime number, else returns false.
+  #
+  # +value+ must be a signed 64-bit integer
+  # (Prime::INT64_MIN..Prime::INT64_MAX).  Within that range the
+  # answer is always exact: it is decided by a deterministic
+  # Miller-Rabin test, never by a probabilistic one.  For integers
+  # outside the 64-bit range no such guarantee is made here, and a
+  # RangeError is raised instead of silently returning a
+  # probabilistic answer; use Integer#prime? for those.
+  #
+  # == Exceptions
+  # +ArgumentError+:: when +value+ is not an Integer.
+  # +RangeError+:: when +value+ is outside the signed 64-bit range.
+  def prime_int64?(value)
+    raise ArgumentError, "Expected an integer, got #{value}" unless value.is_a?(Integer)
+    unless INT64_MIN <= value && value <= INT64_MAX
+      raise RangeError, "#{value} is out of the signed 64-bit range"
+    end
+    Int64Factorizer.prime?(value)
+  end
+
+  # Returns the factorization of +value+, which must be a signed
+  # 64-bit integer (Prime::INT64_MIN..Prime::INT64_MAX).
+  #
+  # This is a fast alternative to #prime_division for that range:
+  # besides trial division it uses perfect power detection and
+  # Pollard's rho algorithm, so even products of two large primes
+  # are factorized quickly.
+  #
+  # == Parameters
+  # +value+:: A signed 64-bit integer.
+  # +random+:: Optional.  The random source used by Pollard's rho;
+  #            any object responding to +rand(range)+, e.g. an
+  #            instance of Random.  Pass <tt>Random.new(seed)</tt>
+  #            to make the factorization reproducible.
+  # +budget+:: Optional.  The maximum number of Pollard's rho
+  #            iterations (modular multiplications) to perform
+  #            before giving up.  The default is enough to factor
+  #            any signed 64-bit integer with overwhelming
+  #            probability.
+  #
+  # == Return value
+  # A Prime::Int64Factorization.  Its +factors+ are the proven
+  # prime factors as <tt>[prime, exponent]</tt> pairs, in the same
+  # format as #prime_division; when the factorization is complete
+  # (+result.complete?+ is true), +result.to_a+ equals
+  # Prime.prime_division(value).
+  #
+  # If the budget is exhausted first, +result.complete?+ is false
+  # and +result.remainder+ holds the product of the cofactors that
+  # are proven composite but could not be split in time, so the
+  # proven factors and the unfactored remainder are always
+  # distinguishable.  Either way,
+  #
+  #   Prime.int_from_prime_division(result.factors) * result.remainder == value
+  #
+  # Primality of every returned factor (and compositeness of the
+  # remainder) is proven, not probabilistic: the Miller-Rabin test
+  # used internally is deterministic for the whole 64-bit range.
+  #
+  # == Exceptions
+  # +ZeroDivisionError+:: when +value+ is zero.
+  # +ArgumentError+:: when +value+ is not an Integer, or +budget+
+  #                   is not a non-negative Integer.
+  # +RangeError+:: when +value+ is outside the signed 64-bit range.
+  #                Use #prime_division for arbitrary integers; the
+  #                guarantees of this method do not apply there.
+  #
+  # == Example
+  #
+  #   result = Prime.prime_division_int64(45, random: Random.new(42))
+  #   result.complete?  #=> true
+  #   result.to_a       #=> [[3, 2], [5, 1]]
+  #
+  def prime_division_int64(value, random: Random.new, budget: 1_000_000)
+    raise ArgumentError, "Expected an integer, got #{value}" unless value.is_a?(Integer)
+    raise ZeroDivisionError if value == 0
+    unless INT64_MIN <= value && value <= INT64_MAX
+      raise RangeError, "#{value} is out of the signed 64-bit range; use #prime_division instead"
+    end
+    unless budget.is_a?(Integer) && budget >= 0
+      raise ArgumentError, "Expected a non-negative integer budget, got #{budget}"
+    end
+    unless random.respond_to?(:rand)
+      raise ArgumentError, "Expected a random number generator, got #{random}"
+    end
+
+    factors = []
+    if value < 0
+      factors << [-1, 1]
+      value = -value
+    end
+    proven, remainder = Int64Factorizer.new(random: random, budget: budget).factorize(value)
+    Int64Factorization.new(factors.concat(proven), remainder)
+  end
+
+  # The result of Prime#prime_division_int64.
+  #
+  # It carries the proven prime factors of the requested value and,
+  # when the work budget was exhausted before the factorization was
+  # complete, the unfactored remainder.
+  class Int64Factorization
+    include Enumerable
+
+    # The proven prime factors, as an array of
+    # <tt>[prime, exponent]</tt> pairs sorted by prime, in the same
+    # format as Prime#prime_division.  The primality of every factor
+    # is proven, never probabilistic.
+    attr_reader :factors
+
+    # The cofactor that was not decomposed into primes, 1 when the
+    # factorization is complete.  When it is not 1, it is a product
+    # of integers each proven composite, whose factors could not be
+    # found within the given budget.
+    attr_reader :remainder
+
+    def initialize(factors, remainder) # :nodoc:
+      @factors = factors.freeze
+      @remainder = remainder
+    end
+
+    # Returns true if the factorization is complete, i.e. #factors
+    # holds the full prime factorization and #remainder is 1.
+    def complete?
+      @remainder == 1
+    end
+
+    # Iterates over the proven <tt>[prime, exponent]</tt> pairs.
+    def each(&block)
+      return to_enum(__method__) { @factors.size } unless block_given?
+      @factors.each(&block)
+    end
+
+    # Returns the proven prime factors as an array of
+    # <tt>[prime, exponent]</tt> pairs, compatible with
+    # Prime#prime_division and Integer.from_prime_division.
+    # Check #complete? to know whether this is the full
+    # factorization of the requested value.
+    def to_a
+      @factors.dup
+    end
+
+    # Returns the factorized value, i.e. the product of the proven
+    # factors and the remainder.  Always equals the value that was
+    # given to Prime#prime_division_int64.
+    def to_i
+      Prime.int_from_prime_division(@factors) * @remainder
+    end
+
+    def ==(other)
+      other.is_a?(Int64Factorization) &&
+        @factors == other.factors &&
+        @remainder == other.remainder
+    end
+  end
+
+  # Internal use.  Factorizes signed 64-bit integers, combining
+  # trial division, a deterministic Miller-Rabin primality test,
+  # perfect power detection and Pollard's rho algorithm with
+  # Brent's improvement.  The random source and the work budget of
+  # the randomized parts are supplied by the caller.
+  class Int64Factorizer
+    # Small primes used for trial division.
+    SMALL_PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41,
+                    43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97].freeze
+
+    # Testing against the first twelve prime bases is a deterministic
+    # primality test for every n < 3_317_044_064_679_887_385_961_981,
+    # which covers the whole unsigned 64-bit range.
+    # Using values from https://en.wikipedia.org/wiki/Miller%E2%80%93Rabin_primality_test
+    MILLER_RABIN_BASES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37].freeze
+
+    # Deterministic primality test for 0 <= n < 2**64.
+    def self.prime?(n)
+      return false if n < 2
+      SMALL_PRIMES.each do |p|
+        return true if n == p
+        return false if n % p == 0
+      end
+      # n > 97 here, so every base is smaller than n.
+      d = n - 1
+      r = 0
+      while d.even?
+        d >>= 1
+        r += 1
+      end
+      MILLER_RABIN_BASES.each do |a|
+        x = a.pow(d, n)
+        next if x == 1 || x == n - 1
+        composite = true
+        (r - 1).times do
+          x = x.pow(2, n)
+          if x == n - 1
+            composite = false
+            break
+          end
+        end
+        return false if composite
+      end
+      true
+    end
+
+    def initialize(random:, budget:)
+      @random = random
+      @budget = budget
+    end
+
+    # Factorizes n, where 1 <= n < 2**64.  Returns a pair
+    # [factors, remainder], where factors is a sorted array of
+    # proven [prime, exponent] pairs and remainder is the product
+    # of the proven composite cofactors that could not be split
+    # within the budget (1 when the factorization is complete).
+    def factorize(n)
+      counts = Hash.new(0)
+      SMALL_PRIMES.each do |p|
+        while n % p == 0
+          n /= p
+          counts[p] += 1
+        end
+      end
+      stack = n > 1 ? [n] : []
+      until stack.empty?
+        m = stack.pop
+        next if m == 1
+        if Int64Factorizer.prime?(m)
+          counts[m] += 1
+        elsif (power = perfect_power(m))
+          base, exponent = power
+          exponent.times { stack.push(base) }
+        elsif (divisor = pollard_rho(m))
+          stack.push(divisor, m / divisor)
+        else
+          # The budget is exhausted; m and whatever is left on the
+          # stack become the remainder.
+          stack.push(m)
+          break
+        end
+      end
+      remainder = 1
+      stack.each do |m|
+        if Int64Factorizer.prime?(m)
+          counts[m] += 1
+        else
+          remainder *= m
+        end
+      end
+      [counts.map { |prime, exponent| [prime, exponent] }.sort, remainder]
+    end
+
+    private
+
+    # If n is a perfect power, returns [base, exponent] with
+    # exponent > 1; otherwise returns nil.
+    def perfect_power(n)
+      2.upto(n.bit_length - 1) do |exponent|
+        base = integer_root(n, exponent)
+        return [base, exponent] if base**exponent == n
+      end
+      nil
+    end
+
+    # Returns the largest integer r such that r**k <= n.
+    def integer_root(n, k)
+      lo = 1
+      hi = 1 << ((n.bit_length + k - 1) / k)
+      while hi - lo > 1
+        mid = (lo + hi) / 2
+        if mid**k <= n
+          lo = mid
+        else
+          hi = mid
+        end
+      end
+      lo
+    end
+
+    # Pollard's rho algorithm with Brent's improvement.  Returns a
+    # non-trivial divisor of n, or nil when the budget is exhausted.
+    # n must be an odd composite not divisible by any small prime.
+    def pollard_rho(n)
+      block_size = 128
+      until @budget <= 0
+        y = @random.rand(1...n)
+        c = @random.rand(1...n)
+        g = 1
+        r = 1
+        q = 1
+        x = y
+        ys = y
+        while g == 1
+          x = y
+          r.times do
+            return nil if @budget <= 0
+            @budget -= 1
+            y = (y * y + c) % n
+          end
+          k = 0
+          while k < r && g == 1
+            ys = y
+            [block_size, r - k].min.times do
+              return nil if @budget <= 0
+              @budget -= 1
+              y = (y * y + c) % n
+              q = q * (x - y).abs % n
+            end
+            g = n.gcd(q)
+            k += block_size
+          end
+          r <<= 1
+        end
+        if g == n
+          loop do
+            return nil if @budget <= 0
+            @budget -= 1
+            ys = (ys * ys + c) % n
+            g = n.gcd((x - ys).abs)
+            break if g > 1
+          end
+          next if g == n # unlucky parameters; retry with fresh ones
+        end
+        return g
+      end
+      nil
+    end
   end
 
   # An abstract class for enumerating pseudo-prime numbers.

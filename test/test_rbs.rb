@@ -53,6 +53,18 @@ module RBSTypeTest
                        Prime, :prime_division, 57
     end
 
+    def test_prime_int64?
+      assert_send_type "(::Integer) -> bool",
+                       Prime, :prime_int64?, 57
+    end
+
+    def test_prime_division_int64
+      assert_send_type "(::Integer) -> ::Prime::Int64Factorization",
+                       Prime, :prime_division_int64, 57
+      assert_send_type "(::Integer, random: ::Random, budget: ::Integer) -> ::Prime::Int64Factorization",
+                       Prime, :prime_division_int64, 57, random: Random.new(42), budget: 1000
+    end
+
     def test_instance
       assert_send_type "() -> ::Prime",
                        Prime, :instance
@@ -99,6 +111,16 @@ module RBSTypeTest
     def test_prime_division
       assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
                        Prime.instance, :prime_division, 57
+    end
+
+    def test_prime_int64?
+      assert_send_type "(::Integer) -> bool",
+                       Prime.instance, :prime_int64?, 57
+    end
+
+    def test_prime_division_int64
+      assert_send_type "(::Integer) -> ::Prime::Int64Factorization",
+                       Prime.instance, :prime_division_int64, 57
     end
   end
 end

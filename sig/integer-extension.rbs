@@ -32,6 +32,17 @@ class Integer
 
   # <!--
   #   rdoc-file=lib/prime.rb
+  #   - prime_division_int64(random: Random.new, budget: 1_000_000)
+  # -->
+  # Returns the factorization of `self`, which must be a signed 64-bit
+  # integer.
+  #
+  # See Prime#prime_division_int64 for more details.
+  #
+  def prime_division_int64: (?random: Random random, ?budget: Integer budget) -> Prime::Int64Factorization
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
   #   - prime?()
   # -->
   # Returns true if `self` is a prime number, else returns false. Not recommended
