@@ -326,6 +326,265 @@ class Prime
     pv
   end
 
+  # Generates a Pocklington primality certificate for +value+.
+  #
+  # The certificate contains only integer data and recursively certificates
+  # every prime factor used from +value - 1+. When +known_factors+ is nil,
+  # the generator is used to factor +value - 1+. When it is an array, it is
+  # interpreted as a known partial factorization and no additional factor
+  # search is performed.
+  #
+  # Known factor entries are +[prime, exponent]+ or
+  # +[prime, exponent, child_known_factors]+. The third form supplies a
+  # known partial factorization of +prime - 1+ for recursive certificate
+  # generation.
+  #
+  # Returns Prime::Pocklington::UNPROVED if no certificate can be produced.
+  # That status does not assert that +value+ is composite.
+  def pocklington_certificate(value, known_factors = nil, generator = Prime::Generator23.new)
+    Pocklington.certificate(value, known_factors, generator)
+  end
+
+  # Returns true if +certificate+ is a self-contained, valid Pocklington
+  # certificate. This method does not use Prime#prime?, Integer#prime?, or any
+  # result retained while the certificate was generated.
+  def valid_pocklington_certificate?(certificate)
+    Pocklington.valid?(certificate)
+  end
+
+  # Pocklington primality certificates.
+  #
+  # A certificate for a prime +n+ contains a sufficiently large product +F+
+  # of certified prime powers dividing +n - 1+, together with a witness +a+
+  # satisfying the Pocklington congruences. Certificates are plain Hashes
+  # containing integers and Arrays, so they can be marshalled or otherwise
+  # transmitted independently of the process that generated them.
+  class Pocklington
+    UNPROVED = :unproved
+
+    BASE_CERTIFICATES = [2, 3].freeze
+    private_constant :BASE_CERTIFICATES
+
+    CERTIFICATE_KEYS = [:prime, :factors, :witness].freeze
+    BASE_CERTIFICATE_KEYS = [:prime].freeze
+    private_constant :CERTIFICATE_KEYS, :BASE_CERTIFICATE_KEYS
+
+    WITNESS_SEARCH_LIMIT = 100
+    private_constant :WITNESS_SEARCH_LIMIT
+
+    MAXIMUM_CERTIFICATE_DEPTH = 10_000
+    private_constant :MAXIMUM_CERTIFICATE_DEPTH
+
+    MAXIMUM_FACTOR_COUNT = 10_000
+    private_constant :MAXIMUM_FACTOR_COUNT
+
+    class << self
+      # Returns a certificate for +n+, or UNPROVED if one cannot be made.
+      def certificate(n, known_factors = nil, generator = Prime::Generator23.new)
+        raise ArgumentError, "Expected an integer, got #{n}" unless n.is_a?(Integer)
+        raise ArgumentError, "Expected a prime generator, got #{generator}" unless generator.respond_to?(:each)
+        build_certificate(n, known_factors, generator)
+      end
+
+      # Independently verifies a certificate without primality tests or caches.
+      def valid?(certificate)
+        verify_certificate(certificate, {}, 0)
+      rescue StandardError, SystemStackError
+        false
+      end
+
+      private
+
+      def build_certificate(n, known_factors, generator)
+        return UNPROVED unless n >= 2
+        return {prime: n} if BASE_CERTIFICATES.include?(n)
+        return UNPROVED if n.even?
+
+        factors =
+          if known_factors.nil?
+            factorize_for_certificate(n - 1, generator.class.new)
+          else
+            normalize_known_factors(known_factors)
+          end
+
+        return UNPROVED if factors.empty?
+
+        n_minus_one = n - 1
+        product = 1
+        certified_factors = []
+
+        factors.sort_by(&:first).each do |prime, exponent, child_factors|
+          break if product * product > n
+
+          return UNPROVED unless prime.is_a?(Integer) && exponent.is_a?(Integer)
+          return UNPROVED unless prime >= 2 && prime < n
+          return UNPROVED unless exponent >= 1 && exponent <= n_minus_one.abs.bit_length
+
+          power = bounded_power(prime, exponent, n_minus_one)
+          return UNPROVED unless power
+          product = bounded_multiply(product, power, n_minus_one)
+          return UNPROVED unless product && n_minus_one % product == 0
+
+          child_certificate = build_certificate(prime, child_factors, generator.class.new)
+          return UNPROVED if child_certificate == UNPROVED
+
+          certified_factors << [prime, exponent, child_certificate]
+        end
+
+        return UNPROVED unless product * product > n
+
+        witness = find_witness(n, product, certified_factors.map(&:first))
+        return UNPROVED unless witness
+
+        generated = {prime: n, factors: certified_factors, witness: witness}
+        valid?(generated) ? generated : UNPROVED
+      end
+
+      def normalize_known_factors(known_factors)
+        raise ArgumentError, "Expected an array of known factors" unless known_factors.is_a?(Array)
+
+        factors = {}
+        known_factors.each do |entry|
+          raise ArgumentError, "Expected [prime, exponent] or [prime, exponent, factors]" unless entry.is_a?(Array) && entry.size.between?(2, 3)
+
+          prime, exponent, child_factors = entry
+          raise ArgumentError, "Expected an integer prime factor" unless prime.is_a?(Integer)
+          raise ArgumentError, "Expected a positive integer exponent" unless exponent.is_a?(Integer) && exponent >= 1
+          if entry.size == 3 && !(child_factors.nil? || child_factors.is_a?(Array))
+            raise ArgumentError, "Expected known child factors to be an array or nil"
+          end
+          raise ArgumentError, "Duplicate known factor #{prime}" if factors.key?(prime)
+
+          factors[prime] = [exponent, child_factors]
+        end
+
+        factors.map { |prime, (exponent, child_factors)| [prime, exponent, child_factors] }
+      end
+
+      def factorize_for_certificate(value, generator)
+        factors = []
+        generator.each do |candidate|
+          break if candidate * candidate > value
+
+          exponent = 0
+          while value % candidate == 0
+            value /= candidate
+            exponent += 1
+          end
+          factors << [candidate, exponent, nil] if exponent > 0
+          break if value == 1
+        end
+        factors << [value, 1, nil] if value > 1
+        factors
+      end
+
+      def bounded_power(base, exponent, limit)
+        power = 1
+        squared = base
+        while exponent > 0
+          if exponent.odd?
+            power *= squared
+            return nil if power > limit
+          end
+          exponent >>= 1
+          if exponent > 0
+            squared *= squared
+            return nil if squared > limit
+          end
+        end
+        power
+      end
+
+      def bounded_multiply(left, right, limit)
+        product = left * right
+        product <= limit ? product : nil
+      end
+
+      def find_witness(n, product, factor_primes)
+        n_minus_one = n - 1
+        upper_bound = [n - 2, WITNESS_SEARCH_LIMIT].min
+
+        (2..upper_bound).each do |witness|
+          next unless witness.gcd(n) == 1
+          next unless witness.pow(n_minus_one, n) == 1
+
+          next unless factor_primes.all? do |prime|
+            value = witness.pow(n_minus_one / prime, n)
+            (value - 1).gcd(n) == 1
+          end
+
+          return witness if product * product > n
+        end
+
+        nil
+      end
+
+      def verify_certificate(certificate, active, depth)
+        return false unless certificate.is_a?(Hash)
+        return false if depth > MAXIMUM_CERTIFICATE_DEPTH
+        n = certificate[:prime]
+        return false unless n.is_a?(Integer)
+
+        if BASE_CERTIFICATES.include?(n)
+          return certificate.keys.sort == BASE_CERTIFICATE_KEYS.sort
+        end
+
+        return false unless n > 3
+        return false if active.key?(n)
+
+        active[n] = true
+        begin
+          verify_non_base_certificate(certificate, n, active, depth)
+        ensure
+          active.delete(n)
+        end
+      end
+
+      def verify_non_base_certificate(certificate, n, active, depth)
+        return false unless certificate.keys.sort == CERTIFICATE_KEYS.sort
+
+        factors = certificate[:factors]
+        witness = certificate[:witness]
+        n_minus_one = n - 1
+
+        return false unless factors.is_a?(Array) && !factors.empty? && factors.size <= MAXIMUM_FACTOR_COUNT
+        return false unless witness.is_a?(Integer) && witness >= 2 && witness <= n - 2
+
+        product = 1
+        seen = {}
+
+        factors.each do |entry|
+          return false unless entry.is_a?(Array) && entry.size == 3
+          prime, exponent, child_certificate = entry
+
+          return false unless prime.is_a?(Integer) && exponent.is_a?(Integer)
+          return false unless child_certificate.is_a?(Hash)
+          return false unless prime >= 2 && prime < n
+          return false unless exponent >= 1 && exponent <= n_minus_one.bit_length
+          return false if seen.key?(prime)
+          return false unless verify_certificate(child_certificate, active, depth + 1)
+          return false unless child_certificate[:prime] == prime
+
+          seen[prime] = true
+          power = bounded_power(prime, exponent, n_minus_one)
+          return false unless power
+          product = bounded_multiply(product, power, n_minus_one)
+          return false unless product && n_minus_one % product == 0
+        end
+
+        return false unless product * product > n
+        return false unless witness.pow(n_minus_one, n) == 1
+
+        factors.each do |prime, exponent, _|
+          value = witness.pow(n_minus_one / prime, n)
+          return false unless (value - 1).gcd(n) == 1
+        end
+
+        true
+      end
+    end
+  end
+
   # An abstract class for enumerating pseudo-prime numbers.
   #
   # Concrete subclasses should override succ, next, rewind.

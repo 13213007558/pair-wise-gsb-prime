@@ -270,6 +270,49 @@ class Prime
   #
   def prime_division: (Integer, ?PseudoPrimeGenerator generator) -> Array[[ Integer, Integer ]]
 
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - pocklington_certificate(value, known_factors = nil, generator = Prime::Generator23.new)
+  # -->
+  # Generates a Pocklington primality certificate, or returns `:unproved`.
+  #
+  def self.pocklington_certificate: (Integer value, ?(Array[[ Integer, Integer ]] | Array[[ Integer, Integer, untyped? ]])? known_factors, ?PseudoPrimeGenerator generator) -> (Hash[Symbol, untyped] | :unproved)
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - pocklington_certificate(value, known_factors = nil, generator = Prime::Generator23.new)
+  # -->
+  # Generates a Pocklington primality certificate, or returns `:unproved`.
+  #
+  def pocklington_certificate: (Integer value, ?(Array[[ Integer, Integer ]] | Array[[ Integer, Integer, untyped? ]])? known_factors, ?PseudoPrimeGenerator generator) -> (Hash[Symbol, untyped] | :unproved)
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - valid_pocklington_certificate?(certificate)
+  # -->
+  # Independently verifies a self-contained Pocklington certificate.
+  #
+  def self.valid_pocklington_certificate?: (untyped certificate) -> bool
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - valid_pocklington_certificate?(certificate)
+  # -->
+  # Independently verifies a self-contained Pocklington certificate.
+  #
+  def valid_pocklington_certificate?: (untyped certificate) -> bool
+
+  # <!-- rdoc-file=lib/prime.rb -->
+  # Pocklington primality certificates.
+  #
+  class Pocklington
+    UNPROVED: :unproved
+
+    def self.certificate: (Integer n, ?(Array[[ Integer, Integer ]] | Array[[ Integer, Integer, untyped? ]])? known_factors, ?PseudoPrimeGenerator generator) -> (Hash[Symbol, untyped] | :unproved)
+
+    def self.valid?: (untyped certificate) -> bool
+  end
+
   # Returns the singleton instance.
   #
   def self.instance: () -> Prime

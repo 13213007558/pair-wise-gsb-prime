@@ -38,6 +38,18 @@ Prime.prime?(7)           #=> true
 Prime.prime_division(8959)                          #=> [[17, 2], [31, 1]]
 Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
+
+# A Pocklington certificate is self-contained data. The verifier uses only
+# modular arithmetic and recursive certificates supplied with the certificate.
+certificate = Prime.pocklington_certificate(65537)
+Prime.valid_pocklington_certificate?(certificate)    #=> true
+
+# For primes whose n-1 factorization is only partially known, supply the
+# known factors instead of repeating the expensive search.
+mersenne_prime = 2**61 - 1
+known_factors = [[2, 1], [3, 2], [5, 2], [7, 1], [11, 1], [13, 1]]
+result = Prime.pocklington_certificate(mersenne_prime, known_factors)
+result == Prime::Pocklington::UNPROVED              # only means "not proven"
 ```
 
 ## Contributing

@@ -274,6 +274,164 @@ class TestPrime < Test::Unit::TestCase
     end if defined?(Ractor)
   end
 
+  class TestPocklington < Test::Unit::TestCase
+    def test_certificates_for_known_primes
+      [2, 3, 5, 7, 11, 13, 23, 47, 65537].each do |n|
+        certificate = Prime.pocklington_certificate(n)
+        assert_kind_of Hash, certificate
+        assert_equal n, certificate[:prime]
+        assert Prime.valid_pocklington_certificate?(certificate)
+      end
+    end
+
+    def test_large_prime_with_partial_known_factors
+      n = 2**61 - 1
+      known_factors = [
+        [2, 1], [3, 2], [5, 2], [7, 1], [11, 1], [13, 1],
+        [31, 1], [41, 1], [61, 1], [151, 1], [331, 1], [1321, 1]
+      ]
+
+      certificate = Prime.pocklington_certificate(n, known_factors)
+      assert_kind_of Hash, certificate
+      assert Prime.valid_pocklington_certificate?(Marshal.load(Marshal.dump(certificate)))
+    end
+
+    def test_verification_does_not_use_primality_or_generator_cache
+      certificate = Prime.pocklington_certificate(47, [[23, 1]])
+      guarded = Marshal.load(Marshal.dump(certificate))
+      calls = []
+      trace = TracePoint.new(:call, :c_call) do |event|
+        calls << event.method_id if event.method_id == :prime?
+      end
+      begin
+        trace.enable { assert Prime.valid_pocklington_certificate?(guarded) }
+      ensure
+        trace.disable
+      end
+      assert_empty calls
+    end
+
+    def test_tampering_with_each_certificate_field
+      certificate = Prime.pocklington_certificate(23, [[11, 1]])
+
+      integer_paths(certificate).each do |path|
+        invalid = Marshal.load(Marshal.dump(certificate))
+        target = path[0..-2].inject(invalid) { |object, key| object[key] }
+        target[path.last] = path.last == :witness ? 1 : target[path.last] + 2
+        assert_equal false, Prime.valid_pocklington_certificate?(invalid), path.inspect
+      end
+    end
+
+    def test_tampered_factorization
+      certificate = Prime.pocklington_certificate(23, [[11, 1]])
+
+      invalid = Marshal.load(Marshal.dump(certificate))
+      invalid[:factors] << [2, 1, {prime: 2}]
+      assert_equal false, Prime.valid_pocklington_certificate?(invalid)
+
+      invalid = Marshal.load(Marshal.dump(certificate))
+      invalid[:factors][0][2] = {prime: 2}
+      assert_equal false, Prime.valid_pocklington_certificate?(invalid)
+
+      duplicate = Marshal.load(Marshal.dump(certificate))
+      duplicate[:factors] << Marshal.load(Marshal.dump(duplicate[:factors][0]))
+      assert_equal false, Prime.valid_pocklington_certificate?(duplicate)
+
+      five = {prime: 5, factors: [[2, 2, {prime: 2}]], witness: 2}
+      invalid_five = Marshal.load(Marshal.dump(five))
+      invalid_five[:factors][0][1] = 1
+      assert_equal false, Prime.valid_pocklington_certificate?(invalid_five)
+    end
+
+    def test_circular_certificates_are_rejected
+      certificate = Prime.pocklington_certificate(23, [[11, 1]])
+
+      self_cycle = Marshal.load(Marshal.dump(certificate))
+      self_cycle[:factors][0][2] = self_cycle
+      assert_equal false, Prime.valid_pocklington_certificate?(self_cycle)
+
+      pair = {prime: 23, factors: [[11, 1, nil]], witness: 2}
+      pair_child = {prime: 11, factors: [[23, 1, pair], [5, 1, {prime: 5, factors: [[2, 2, {prime: 2}]], witness: 2}]], witness: 2}
+      pair[:factors][0][2] = pair_child
+      assert_equal false, Prime.valid_pocklington_certificate?(pair)
+    end
+
+    def test_witness_must_be_in_range
+      certificate = Prime.pocklington_certificate(23, [[11, 1]])
+
+      [0, 1, 22, 23, -2].each do |witness|
+        invalid = Marshal.load(Marshal.dump(certificate))
+        invalid[:witness] = witness
+        assert_equal false, Prime.valid_pocklington_certificate?(invalid)
+      end
+    end
+
+    def test_insufficient_known_coverage_is_unproved
+      n = 2**61 - 1
+      assert_equal Prime::Pocklington::UNPROVED, Prime.pocklington_certificate(n, [[2, 1]])
+      assert_equal Prime::Pocklington::UNPROVED, Prime.pocklington_certificate(13, [[3, 1]])
+      assert_equal Prime::Pocklington::UNPROVED, Prime.pocklington_certificate(23, [[2, 1]])
+    end
+
+    def test_composite_is_unproved_not_false_or_composite
+      [4, 9, 15, 25, 561].each do |n|
+        assert_equal Prime::Pocklington::UNPROVED, Prime.pocklington_certificate(n)
+      end
+
+      assert_equal Prime::Pocklington::UNPROVED, Prime.pocklington_certificate(9, [[2, 2]])
+      assert_equal Prime::Pocklington::UNPROVED, Prime.pocklington_certificate(25, [[2, 3]])
+    end
+
+    def test_non_certifiable_small_factors_are_unproved
+      assert_equal Prime::Pocklington::UNPROVED, Prime.pocklington_certificate(17, [[2, 2]])
+    end
+
+    def test_malformed_certificates_are_false
+      malformed = [
+        nil, 1, "23", [], {}, {prime: 4},
+        {prime: 2, factors: [], witness: 2},
+        {prime: 2, extra: 1},
+        {prime: 5, factors: [], witness: 2},
+        {prime: 5, factors: [[4, 1, {prime: 4}]], witness: 2},
+        {prime: 5, factors: [[2, 0, {prime: 2}]], witness: 2},
+        {prime: 5, factors: [[2, 1, {prime: 3}]], witness: 2},
+        {prime: 5, factors: [[2, 1, {prime: 2}]], witness: 2.0}
+      ]
+
+      malformed.each do |certificate|
+        assert_equal false, Prime.valid_pocklington_certificate?(certificate)
+      end
+    end
+
+    def test_invalid_known_factor_arguments
+      assert_raise(ArgumentError) { Prime.pocklington_certificate(23, [[11]]) }
+      assert_raise(ArgumentError) { Prime.pocklington_certificate(23, [[11, 0]]) }
+      assert_raise(ArgumentError) { Prime.pocklington_certificate(23, [[11, 1, :bad]]) }
+      assert_raise(ArgumentError) { Prime.pocklington_certificate(23, [[11, 1], [11, 1]]) }
+      assert_raise(ArgumentError) { Prime.pocklington_certificate("23", [[11, 1]]) }
+      assert_raise(ArgumentError) { Prime.pocklington_certificate(23, nil, Object.new) }
+    end
+
+    private
+
+    def integer_paths(value, path = [])
+      case value
+      when Hash
+        value.flat_map do |key, child|
+          integer_paths(child, path + [key])
+        end
+      when Array
+        value.each_with_index.flat_map do |child, index|
+          integer_paths(child, path + [index])
+        end
+      when Integer
+        [path]
+      else
+        []
+      end
+    end
+  end
+
   def test_eratosthenes_works_fine_after_timeout
     sieve = Prime::EratosthenesSieve.instance
     sieve.send(:initialize)

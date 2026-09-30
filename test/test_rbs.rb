@@ -53,6 +53,15 @@ module RBSTypeTest
                        Prime, :prime_division, 57
     end
 
+    def test_pocklington_certificate
+      assert_send_type "(::Integer) -> (::Hash[::Symbol, untyped] | :unproved)",
+                       Prime, :pocklington_certificate, 57
+      assert_send_type "(::Integer, ::Array[[ ::Integer, ::Integer ]]) -> (::Hash[::Symbol, untyped] | :unproved)",
+                       Prime, :pocklington_certificate, 47, [[23, 1]]
+      assert_send_type "(untyped) -> bool",
+                       Prime, :valid_pocklington_certificate?, nil
+    end
+
     def test_instance
       assert_send_type "() -> ::Prime",
                        Prime, :instance
@@ -99,6 +108,13 @@ module RBSTypeTest
     def test_prime_division
       assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
                        Prime.instance, :prime_division, 57
+    end
+
+    def test_pocklington_certificate
+      assert_send_type "(::Integer) -> (::Hash[::Symbol, untyped] | :unproved)",
+                       Prime.instance, :pocklington_certificate, 57
+      assert_send_type "(untyped) -> bool",
+                       Prime.instance, :valid_pocklington_certificate?, nil
     end
   end
 end
