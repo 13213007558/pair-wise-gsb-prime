@@ -246,6 +246,15 @@ class Prime
     end
   end
 
+  # Returns the number of primes less than or equal to +value+.
+  #
+  # Unlike counting the values yielded by #each, this uses a combinatorial
+  # divide-and-conquer algorithm. It does not enumerate primes up to +value+
+  # and remains practical for values as large as 10**12.
+  def prime_count(value)
+    PrimeCounting.count(value)
+  end
+
   # Re-composes a prime factorization and returns the product.
   #
   # For the decomposition:
@@ -558,4 +567,176 @@ class Prime
       @max_checked = segment_max
     end
   end
+
+  # Internal use. Exact prime counting for Prime#prime_count.
+  class PrimeCounting
+    CACHED_SIEVE_LIMIT = 1_000_000
+    SMALL_PRIMES = [2, 3, 5, 7]
+    WHEELS = [nil]
+
+    product = 1
+    SMALL_PRIMES.each_with_index do |prime, index|
+      product *= prime
+      prefix = []
+      count = 0
+      (0..product).each do |remainder|
+        count += 1 if remainder >= 1 && SMALL_PRIMES[0..index].all? {|small_prime| remainder % small_prime != 0}
+        prefix << count
+      end
+      WHEELS << [product, prefix[-1], prefix].freeze
+    end
+    WHEELS.freeze
+
+    class << self
+      def count(value)
+        raise ArgumentError, "Expected an integer, got #{value}" unless value.kind_of?(Integer)
+        return 0 if value < 2
+
+        limit = [Integer.sqrt(value), [value, CACHED_SIEVE_LIMIT].min].max
+        sieve = limit <= CACHED_SIEVE_LIMIT ? cached_sieve(limit) : Sieve.new(limit)
+        Counter.new(sieve).count(value)
+      end
+
+      def cached_sieve_limit
+        @cached_sieve&.limit
+      end
+
+      private
+
+      def cached_sieve(limit)
+        if @cached_sieve.nil? || @cached_sieve.limit < limit
+          minimum_limit = [limit, 1024].max
+          new_limit = if @cached_sieve
+            [[@cached_sieve.limit * 2, minimum_limit].max, CACHED_SIEVE_LIMIT].min
+          else
+            minimum_limit
+          end
+          @cached_sieve = @cached_sieve.nil? ? Sieve.new(new_limit) : @cached_sieve.grow(new_limit)
+        end
+        @cached_sieve
+      end
+    end
+
+    class Sieve
+      attr_reader :limit, :primes
+
+      def initialize(limit)
+        build(limit)
+      end
+
+      def [](value)
+        return 0 if value < 2
+        @prime_counts[value]
+      end
+
+      def grow(limit)
+        return self if limit <= @limit
+
+        sieve = self.class.allocate
+        sieve.send(:build, limit)
+        sieve
+      end
+
+      private
+
+      def build(limit)
+        table = Array.new(limit + 1, true)
+        table[0] = table[1] = false
+        (4..limit).step(2) {|number| table[number] = false }
+        (3..Integer.sqrt(limit)).step(2) do |prime|
+          next unless table[prime]
+          (prime * prime..limit).step(prime * 2) {|number| table[number] = false }
+        end
+
+        @primes = []
+        @prime_counts = Array.new(limit + 1)
+        count = 0
+        table.each_with_index do |is_prime, number|
+          if is_prime
+            @primes << number
+            count += 1
+          end
+          @prime_counts[number] = count
+        end
+        @limit = limit
+      end
+    end
+
+    class Counter
+      def initialize(sieve)
+        @sieve = sieve
+        @primes = sieve.primes
+        @phi_memo = []
+        @count_memo = {}
+      end
+
+      def count(value)
+        return 0 if value < 2
+        return @sieve[value] if value <= @sieve.limit
+
+        @count_memo[value] ||= begin
+          a = @sieve[Integer.sqrt(Integer.sqrt(value))]
+          b = @sieve[Integer.sqrt(value)]
+          c = @sieve[cube_root(value)]
+          result = phi(value, a) + ((a + b - 2) * (b - a + 1)) / 2
+
+          i = a
+          while i < b
+            prime = @primes[i]
+            result -= count(value / prime)
+
+            if i < c
+              inner_limit = @sieve[Integer.sqrt(value / prime)]
+              j = i
+              while j < inner_limit
+                result -= @sieve[value / (prime * @primes[j])] - j
+                j += 1
+              end
+            end
+
+            i += 1
+          end
+          result
+        end
+      end
+
+      private
+
+      def phi(value, level)
+        return value if level == 0
+
+        period, residues, prefix = PrimeCounting::WHEELS[level]
+        if period
+          quotient, remainder = value.divmod(period)
+          return quotient * residues + prefix[remainder]
+        end
+
+        prime = @primes[level - 1]
+        return 1 if value < prime
+
+        next_prime = @primes[level]
+        return 1 + @sieve[value] - level if value < next_prime * next_prime
+
+        memo = (@phi_memo[level] ||= {})
+        memo[value] ||= phi(value, level - 1) - phi(value / prime, level - 1)
+      end
+
+      def cube_root(value)
+        low = 0
+        high = Integer.sqrt(value) + 1
+        while low + 1 < high
+          middle = (low + high) / 2
+          if middle * middle * middle <= value
+            low = middle
+          else
+            high = middle
+          end
+        end
+        low
+      end
+    end
+
+    private_constant :Counter, :Sieve
+  end
+  private_constant :PrimeCounting
 end

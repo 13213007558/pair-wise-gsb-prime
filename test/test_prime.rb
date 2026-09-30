@@ -147,6 +147,104 @@ class TestPrime < Test::Unit::TestCase
     assert_equal Prime.prime?(4), false
   end
 
+  def test_prime_count_validates_integers
+    assert_raise(ArgumentError) { Prime.prime_count(1.2) }
+    assert_raise(ArgumentError) { Prime.prime_count(nil) }
+  end
+
+  def test_prime_count_small_values
+    assert_equal 0, Prime.prime_count(-1)
+    assert_equal 0, Prime.prime_count(0)
+    assert_equal 0, Prime.prime_count(1)
+    assert_equal 1, Prime.prime_count(2)
+    assert_equal 2, Prime.prime_count(3)
+    assert_equal 2, Prime.prime_count(4)
+    assert_equal 3, Prime.prime_count(5)
+  end
+
+  def test_prime_count_known_values
+    values = {
+      10 => 4,
+      100 => 25,
+      1_000 => 168,
+      10_000 => 1_229,
+      100_000 => 9_592,
+      1_000_000 => 78_498,
+      10_000_000 => 664_579,
+      100_000_000 => 5_761_455,
+      1_000_000_000 => 50_847_534,
+      10_000_000_000 => 455_052_511,
+      100_000_000_000 => 4_118_054_813,
+    }
+
+    values.each do |value, count|
+      assert_equal count, Prime.prime_count(value), "pi(#{value})"
+    end
+  end
+
+  def test_prime_count_around_powers_and_perfect_powers
+    powers = [
+      10, 100, 1_000, 10_000, 100_000, 1_000_000,
+      31**2, 97**2, 997**2,
+      11**3, 21**3,
+      7**4, 11**4,
+    ]
+
+    powers.each do |value|
+      expected = Prime.each(value).count
+      assert_equal expected, Prime.prime_count(value - 1), "pi(#{value - 1})"
+      assert_equal expected, Prime.prime_count(value), "pi(#{value})"
+      assert_equal expected + (value.succ.prime? ? 1 : 0), Prime.prime_count(value + 1), "pi(#{value + 1})"
+    end
+  end
+
+  def test_prime_count_around_one_trillion
+    value = 1_000_000_000_000
+    assert_equal 37_607_912_018, Prime.prime_count(value)
+  end
+
+  def test_prime_count_matches_prime_each_over_small_range
+    expected = 0
+    (0..10_000).each do |value|
+      expected += 1 if value >= 2 && value.prime?
+      assert_equal expected, Prime.prime_count(value), "pi(#{value})"
+    end
+  end
+
+  def test_prime_count_integer_roots_around_perfect_cubes
+    counting = Prime.const_get(:PrimeCounting)
+    sieve = counting.const_get(:Sieve).new(1_000)
+    counter = counting.const_get(:Counter).new(sieve)
+    cube_root = counter.method(:cube_root)
+
+    [7, 11, 97, 997].each do |prime|
+      cube = prime**3
+      assert_equal prime - 1, cube_root.call(cube - 1)
+      assert_equal prime, cube_root.call(cube)
+      assert_equal prime, cube_root.call(cube + 1)
+    end
+  end
+
+  def test_prime_count_reuses_a_bounded_sieve
+    counting = Prime.const_get(:PrimeCounting)
+    counting.instance_variable_set(:@cached_sieve, nil)
+
+    Prime.prime_count(100)
+    first_limit = counting.cached_sieve_limit
+    Prime.prime_count(10_000)
+    intermediate_limit = counting.cached_sieve_limit
+    Prime.prime_count(1_000_000)
+    second_limit = counting.cached_sieve_limit
+    Prime.prime_count(100_000_000_000)
+    third_limit = counting.cached_sieve_limit
+
+    assert_operator first_limit, :<=, 1_024
+    assert_operator intermediate_limit, :<, 1_000_000
+    assert_equal 1_000_000, second_limit
+    assert_equal 1_000_000, third_limit
+    assert_operator counting.const_get(:CACHED_SIEVE_LIMIT), :<=, 1_000_000
+  end
+
   class TestPseudoPrimeGenerator < Test::Unit::TestCase
     def test_upper_bound
       pseudo_prime_generator = Prime::PseudoPrimeGenerator.new(42)

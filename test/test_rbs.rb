@@ -48,6 +48,11 @@ module RBSTypeTest
                        Prime, :prime?, 57
     end
 
+    def test_prime_count
+      assert_send_type "(::Integer) -> ::Integer",
+                       Prime, :prime_count, 57
+    end
+
     def test_prime_division
       assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
                        Prime, :prime_division, 57
@@ -94,6 +99,11 @@ module RBSTypeTest
     def test_prime?
       assert_send_type "(::Integer value) -> bool",
                        Prime.instance, :prime?, 57
+    end
+
+    def test_prime_count
+      assert_send_type "(::Integer value) -> ::Integer",
+                       Prime.instance, :prime_count, 57
     end
 
     def test_prime_division

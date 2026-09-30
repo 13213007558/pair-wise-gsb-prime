@@ -180,6 +180,14 @@ class Prime
 
   # <!--
   #   rdoc-file=lib/prime.rb
+  #   - prime_count(value)
+  # -->
+  # Returns the number of primes less than or equal to `value`.
+  #
+  def self.prime_count: (Integer value) -> Integer
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
   #   - prime?(value, generator = Prime::Generator23.new)
   # -->
   # Returns true if `value` is a prime number, else returns false. Integer#prime?
@@ -193,6 +201,14 @@ class Prime
   # :   optional. A pseudo-prime generator.
   #
   def prime?: (Integer value, ?PseudoPrimeGenerator generator) -> bool
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - prime_count(value)
+  # -->
+  # Returns the number of primes less than or equal to `value`.
+  #
+  def prime_count: (Integer value) -> Integer
 
   # <!--
   #   rdoc-file=lib/prime.rb
