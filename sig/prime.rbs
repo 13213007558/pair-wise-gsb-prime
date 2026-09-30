@@ -48,6 +48,17 @@ class Prime
 
   extend Enumerable[Integer]
 
+  # Raised when the caller-supplied factoring budget is exhausted.
+  class FactorizationBudgetExhausted < RuntimeError
+    # The factorization of the portion already proved.
+    attr_reader factors: Array[[ Integer, Integer ]]
+
+    # The positive unfactored remainder.
+    attr_reader remaining: Integer
+
+    def initialize: (Array[[ Integer, Integer ]], Integer) -> void
+  end
+
   # <!--
   #   rdoc-file=lib/prime.rb
   #   - each(ubound = nil, generator = EratosthenesGenerator.new, &block)
@@ -234,6 +245,19 @@ class Prime
 
   # <!--
   #   rdoc-file=lib/prime.rb
+  #   - prime_division64(value, random:, budget:)
+  # -->
+  # Returns the deterministic prime factorization of a signed 64-bit integer.
+  # Factorization may use the supplied random source, but every returned factor
+  # has been proved prime. Out-of-range integers raise RangeError.
+  #
+  # If the budget is exhausted, raises FactorizationBudgetExhausted containing
+  # the proved factors and the positive unfactored remainder.
+  #
+  def self.prime_division64: (Integer value, random: untyped, budget: Integer) -> Array[[ Integer, Integer ]]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
   #   - prime_division(value, generator = Prime::Generator23.new)
   # -->
   # Returns the factorization of `value`.
@@ -269,6 +293,19 @@ class Prime
   #     3**2 * 5                  #=> 45
   #
   def prime_division: (Integer, ?PseudoPrimeGenerator generator) -> Array[[ Integer, Integer ]]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - prime_division64(value, random:, budget:)
+  # -->
+  # Returns the deterministic prime factorization of a signed 64-bit integer.
+  # Factorization may use the supplied random source, but every returned factor
+  # has been proved prime. Out-of-range integers raise RangeError.
+  #
+  # If the budget is exhausted, raises FactorizationBudgetExhausted containing
+  # the proved factors and the positive unfactored remainder.
+  #
+  def prime_division64: (Integer value, random: untyped, budget: Integer) -> Array[[ Integer, Integer ]]
 
   # Returns the singleton instance.
   #

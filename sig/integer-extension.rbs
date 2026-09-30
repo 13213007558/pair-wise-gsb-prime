@@ -32,6 +32,15 @@ class Integer
 
   # <!--
   #   rdoc-file=lib/prime.rb
+  #   - prime_division64(random:, budget:)
+  # -->
+  # Returns the deterministic prime factorization of self for signed 64-bit
+  # integers. See Prime#prime_division64 for more details.
+  #
+  def prime_division64: (random: untyped, budget: Integer) -> Array[[ Integer, Integer ]]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
   #   - prime?()
   # -->
   # Returns true if `self` is a prime number, else returns false. Not recommended

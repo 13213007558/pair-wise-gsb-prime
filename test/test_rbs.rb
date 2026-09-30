@@ -53,6 +53,11 @@ module RBSTypeTest
                        Prime, :prime_division, 57
     end
 
+    def test_prime_division64
+      assert_send_type "(::Integer value, random: untyped, budget: ::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
+                       Prime, :prime_division64, 57, random: Random.new(1), budget: 100
+    end
+
     def test_instance
       assert_send_type "() -> ::Prime",
                        Prime, :instance
@@ -99,6 +104,11 @@ module RBSTypeTest
     def test_prime_division
       assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
                        Prime.instance, :prime_division, 57
+    end
+
+    def test_prime_division64
+      assert_send_type "(::Integer value, random: untyped, budget: ::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
+                       Prime.instance, :prime_division64, 57, random: Random.new(1), budget: 100
     end
   end
 end

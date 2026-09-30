@@ -214,6 +214,13 @@ class TestPrime < Test::Unit::TestCase
   end
 
   class TestInteger < Test::Unit::TestCase
+    SIGNED_64_BIT_MAX = 2**63 - 1
+    SIGNED_64_BIT_MIN = -(2**63)
+    LARGE_PRIME_NEAR_MAX = 9223372036854775783
+    LARGE_PRIME_NEAR_SQRT = 3037000493
+    LARGE_SEMIPRIME_NEAR_MAX = 3037000429 * 3037000507
+    BUDGET_SMALL_PRIME = 1_500_000_001
+
     def test_prime_division
       pd = PRIMES.inject(&:*).prime_division
       assert_equal PRIMES.map{|p| [p, 1]}, pd
@@ -226,6 +233,124 @@ class TestPrime < Test::Unit::TestCase
       assert_equal PRIMES.inject(&:*), Integer.from_prime_division(PRIMES.map{|p| [p,1]})
 
       assert_equal(-PRIMES.inject(&:*), Integer.from_prime_division([[-1, 1]] + PRIMES.map{|p| [p,1]}))
+    end
+
+    def test_prime_division64
+      values = [
+        1,
+        -12,
+        LARGE_PRIME_NEAR_SQRT**2,
+        LARGE_SEMIPRIME_NEAR_MAX,
+        -LARGE_PRIME_NEAR_MAX,
+        SIGNED_64_BIT_MIN,
+      ]
+
+      values.each do |value|
+        factors = Prime.prime_division64(value, random: Random.new(1234), budget: 100_000)
+        assert_equal value, Prime.int_from_prime_division(factors)
+        factors.each do |prime, _exponent|
+          assert prime == -1 || prime.prime?, "#{prime} is not prime"
+        end
+      end
+
+      assert_equal(
+        [[LARGE_PRIME_NEAR_SQRT, 2]],
+        Prime.prime_division64(LARGE_PRIME_NEAR_SQRT**2, random: Random.new(1234), budget: 100_000)
+      )
+      assert_equal(
+        [[3037000429, 1], [3037000507, 1]],
+        Prime.prime_division64(LARGE_SEMIPRIME_NEAR_MAX, random: Random.new(1234), budget: 100_000)
+      )
+      assert_equal(
+        [[LARGE_PRIME_NEAR_MAX, 1]],
+        LARGE_PRIME_NEAR_MAX.prime_division64(random: Random.new(1234), budget: 100_000)
+      )
+      assert_equal [], Prime.prime_division64(1, random: Random.new(1234), budget: 0)
+      assert_equal [[-1, 1]], Prime.prime_division64(-1, random: Random.new(1234), budget: 0)
+    end
+
+    def test_prime_division64_fixed_seed_is_reproducible
+      first = Prime.prime_division64(
+        LARGE_SEMIPRIME_NEAR_MAX,
+        random: Random.new(987654321),
+        budget: 100_000
+      )
+      second = Prime.prime_division64(
+        LARGE_SEMIPRIME_NEAR_MAX,
+        random: Random.new(987654321),
+        budget: 100_000
+      )
+
+      assert_equal first, second
+      assert_equal LARGE_SEMIPRIME_NEAR_MAX, Prime.int_from_prime_division(first)
+    end
+
+    def test_prime_division64_budget_exhaustion_keeps_proved_factors_separate
+      error = assert_raise(Prime::FactorizationBudgetExhausted) do
+        Prime.prime_division64(
+          -2 * BUDGET_SMALL_PRIME * 3037000507,
+          random: Random.new(1234),
+          budget: 0
+        )
+      end
+
+      assert_equal [[-1, 1], [2, 1]], error.factors
+      assert_equal BUDGET_SMALL_PRIME * 3037000507, error.remaining
+      proved_product = Prime.int_from_prime_division(
+        error.factors.map { |prime, exponent| [prime == -1 ? 1 : prime, exponent] }
+      )
+      assert_equal(-2 * BUDGET_SMALL_PRIME * 3037000507, -proved_product * error.remaining)
+      error.factors.each do |prime, _exponent|
+        assert prime == -1 || prime.prime?, "#{prime} is not prime"
+      end
+    end
+
+    def test_prime_division64_prime_with_no_budget_is_complete
+      assert_equal(
+        [[LARGE_PRIME_NEAR_MAX, 1]],
+        Prime.prime_division64(LARGE_PRIME_NEAR_MAX, random: Random.new(1234), budget: 0)
+      )
+    end
+
+    def test_prime_division64_budget_exhaustion_proves_prime_left_on_stack
+      error = assert_raise(Prime::FactorizationBudgetExhausted) do
+        Prime.prime_division64(
+          1_000_003 * 1_000_033 * 1_000_037,
+          random: Random.new(14),
+          budget: 1_206
+        )
+      end
+
+      assert_equal [[1_000_033, 1]], error.factors
+      assert_equal 1_000_003 * 1_000_037, error.remaining
+      assert_equal(
+        1_000_003 * 1_000_033 * 1_000_037,
+        Prime.int_from_prime_division(error.factors) * error.remaining
+      )
+    end
+
+    def test_prime_division64_rejects_out_of_range_values
+      assert_raise(RangeError) do
+        Prime.prime_division64(SIGNED_64_BIT_MAX + 1, random: Random.new(1234), budget: 1)
+      end
+      assert_raise(RangeError) do
+        Prime.prime_division64(SIGNED_64_BIT_MIN - 1, random: Random.new(1234), budget: 1)
+      end
+    end
+
+    def test_prime_division64_validates_arguments
+      assert_raise(ZeroDivisionError) do
+        Prime.prime_division64(0, random: Random.new(1234), budget: 1)
+      end
+      assert_raise(ArgumentError) do
+        Prime.prime_division64(45, random: Object.new, budget: 1)
+      end
+      assert_raise(ArgumentError) do
+        Prime.prime_division64(45, random: Random.new(1234), budget: -1)
+      end
+      assert_raise(ArgumentError) do
+        Prime.prime_division64(1.2, random: Random.new(1234), budget: 1)
+      end
     end
 
     def test_prime?

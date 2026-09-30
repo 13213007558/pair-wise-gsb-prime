@@ -30,6 +30,13 @@ class Integer
     Prime.prime_division(self, generator)
   end
 
+  # Returns the factorization of +self+ for signed 64-bit integers.
+  #
+  # See Prime#prime_division64 for more details.
+  def prime_division64(random:, budget:)
+    Prime.prime_division64(self, random: random, budget: budget)
+  end
+
   # Returns true if +self+ is a prime number, else returns false.
   # Not recommended for very big integers (> 10**23).
   def prime?
@@ -170,6 +177,40 @@ end
 class Prime
 
   VERSION = "0.1.4"
+
+  SIGNED_64_BIT_MIN = -(2 ** 63)
+  SIGNED_64_BIT_MAX = 2 ** 63 - 1
+
+  SIXTY_FOUR_BIT_SMALL_PRIMES = [
+    2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37,
+    41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97
+  ].freeze
+
+  SIXTY_FOUR_BIT_MILLER_RABIN_BASES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37].freeze
+
+  private_constant :SIGNED_64_BIT_MIN, :SIGNED_64_BIT_MAX,
+                   :SIXTY_FOUR_BIT_SMALL_PRIMES,
+                   :SIXTY_FOUR_BIT_MILLER_RABIN_BASES
+
+  # Raised when a caller-supplied factoring budget is exhausted.
+  #
+  # Every pair in +factors+ contains a proved prime and its exponent.
+  # +remaining+ is the positive product of the factors that have not yet been
+  # factored; it may be either prime or composite and is intentionally not
+  # represented as a prime factor.
+  class FactorizationBudgetExhausted < RuntimeError
+    # The complete prime factorization of the portion already factored.
+    attr_reader :factors
+
+    # The positive part of the value that remains unfactored.
+    attr_reader :remaining
+
+    def initialize(factors, remaining) # :nodoc:
+      @factors = factors
+      @remaining = remaining
+      super("factoring budget exhausted; #{remaining} remains unfactored")
+    end
+  end
 
   include Enumerable
   include Singleton
@@ -324,6 +365,161 @@ class Prime
       pv.push [value, 1]
     end
     pv
+  end
+
+  # Returns the factorization of a signed 64-bit +value+ using Pollard's rho.
+  #
+  # The returned array uses the same +[[prime, exponent], ...]+ representation
+  # as #prime_division. Negative values include <code>[-1, 1]</code>.
+  #
+  # Primality testing in this method is deterministic for the signed 64-bit
+  # range. Factoring itself may use the supplied random source, but all
+  # returned prime factors are proved. Values outside the signed 64-bit range
+  # raise RangeError; callers must use the generic #prime_division for them.
+  #
+  # If +budget+ Pollard's rho iterations are exhausted before factorization is
+  # complete, raises FactorizationBudgetExhausted. Its +factors+ contain only
+  # proved prime factors, while its +remaining+ identifies the unfactored part.
+  #
+  # +random+ must respond to <code>rand(Integer)</code>, like Random. Use a
+  # Random constructed with a fixed seed for reproducible results. +budget+
+  # must be a non-negative Integer.
+  #
+  # === Exceptions
+  # +ZeroDivisionError+:: when +value+ is zero.
+  # +RangeError+:: when +value+ is outside the signed 64-bit range.
+  # +FactorizationBudgetExhausted+:: when +budget+ is exhausted.
+  def prime_division64(value, random:, budget:)
+    unless value.respond_to?(:integer?) && value.integer?
+      raise ArgumentError, "Expected an integer, got #{value}"
+    end
+    unless value.between?(SIGNED_64_BIT_MIN, SIGNED_64_BIT_MAX)
+      raise RangeError, "expected a signed 64-bit integer, got #{value}"
+    end
+    unless random.respond_to?(:rand)
+      raise ArgumentError, "expected random to respond to rand, got #{random}"
+    end
+    unless budget.is_a?(Integer) && budget >= 0
+      raise ArgumentError, "expected a non-negative Integer budget, got #{budget}"
+    end
+
+    raise ZeroDivisionError if value == 0
+
+    factors = Hash.new(0)
+    factors[-1] = 1 if value < 0
+    stack = [value.abs]
+    remaining_budget = budget
+
+    while (number = stack.pop)
+      SIXTY_FOUR_BIT_SMALL_PRIMES.each do |prime|
+        while number % prime == 0
+          factors[prime] += 1
+          number /= prime
+        end
+      end
+
+      next if number == 1
+
+      if prime64?(number)
+        factors[number] += 1
+        next
+      end
+
+      factor = pollard_rho64(number, random, remaining_budget)
+      unless factor
+        raise prime_division64_budget_exhausted(factors, [number, *stack])
+      end
+
+      iterations = factor.delete(:iterations)
+      remaining_budget -= iterations
+      stack.push(number / factor[:factor], factor[:factor])
+    end
+
+    factorization64_result(factors)
+  end
+
+  private
+
+  def factorization64_result(factors)
+    factors.keys.sort.map { |prime| [prime, factors[prime]] }
+  end
+
+  def prime_division64_budget_exhausted(factors, unresolved)
+    remaining = 1
+    unresolved.each do |value|
+      next if value == 1
+
+      if prime64?(value)
+        factors[value] += 1
+      else
+        remaining *= value
+      end
+    end
+
+    FactorizationBudgetExhausted.new(factorization64_result(factors), remaining)
+  end
+
+  def prime64?(value)
+    return value >= 2 if value <= 3
+    return false if value.even?
+
+    exponent = 0
+    odd_part = value - 1
+    while odd_part.even?
+      odd_part /= 2
+      exponent += 1
+    end
+
+    value_minus_one = value - 1
+    SIXTY_FOUR_BIT_MILLER_RABIN_BASES.each do |base|
+      witness = base.pow(odd_part, value)
+      next if witness == 1 || witness == value_minus_one || base == value
+
+      composite = true
+      (exponent - 1).times do
+        witness = witness.pow(2, value)
+        if witness == value_minus_one
+          composite = false
+          break
+        end
+      end
+      return false if composite
+    end
+
+    true
+  end
+
+  def pollard_rho64(number, random, budget)
+    remaining_budget = budget
+
+    while remaining_budget > 0
+      c = random_integer64(random, number - 1)
+      x = random_integer64(random, number - 2) + 2
+      y = x
+      divisor = 1
+
+      while divisor == 1
+        return nil if remaining_budget == 0
+        remaining_budget -= 1
+
+        x = (x * x + c) % number
+        y = (y * y + c) % number
+        y = (y * y + c) % number
+        divisor = (x - y).gcd(number)
+      end
+
+      return {factor: divisor, iterations: budget - remaining_budget} unless divisor == number
+    end
+
+    nil
+  end
+
+  def random_integer64(random, limit)
+    value = random.rand(limit)
+    unless value.is_a?(Integer) && value >= 0 && value < limit
+      raise ArgumentError, "random.rand(#{limit}) returned an invalid value: #{value}"
+    end
+    value
   end
 
   # An abstract class for enumerating pseudo-prime numbers.
