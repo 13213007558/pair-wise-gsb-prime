@@ -40,6 +40,30 @@ Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
 ```
 
+## Pocklington primality certificates
+
+When one party has found a large prime, it can prove its primality to
+anyone else with a Pocklington certificate.  The verifier only needs the
+certificate data: it neither trusts the prover nor repeats the expensive
+search.
+
+```ruby
+require 'prime'
+
+# The prover may pass known prime factors of n-1 to speed things up.
+result = Prime::Pocklington.generate(20123)
+result.proven?        #=> true
+result.certificate    #=> {n: 20123, factors: [[2, 1], [10061, 1]], ...}
+
+# The verifier checks the certificate independently.
+Prime::Pocklington.verify(result.certificate)   #=> true
+
+# Failing to build a certificate does NOT mean the number is composite.
+result = Prime::Pocklington.generate(20078802347)
+result.unproven?      #=> true
+result.reason         #=> "known factors of 20078802347-1 only cover 2, ..."
+```
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/ruby/prime.

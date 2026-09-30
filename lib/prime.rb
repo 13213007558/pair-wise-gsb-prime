@@ -558,4 +558,356 @@ class Prime
       @max_checked = segment_max
     end
   end
+
+  # = Pocklington primality certificates
+  #
+  # Prime::Pocklington generates and independently verifies Pocklington
+  # primality certificates.
+  #
+  # When a server has found a large prime, it can hand a certificate to a
+  # client, and the client can convince itself of the primality without
+  # trusting the server and without repeating the expensive search: the
+  # verifier only needs the certificate data.
+  #
+  # == Certificate format
+  #
+  # A certificate is a plain Hash with Symbol keys, so it can be
+  # serialized with Marshal or YAML:
+  #
+  #   {
+  #     n:                20123,                  # the certified prime
+  #     factors:          [[2, 1], [10061, 1]],   # prime powers q**e dividing n-1
+  #     witnesses:        [[2, 2], [10061, 2]],   # one witness per prime factor
+  #     sub_certificates: [[10061, { ... }]]      # recursive proofs for large factors
+  #   }
+  #
+  # By Pocklington's theorem, +n+ is prime when the product +F+ of the
+  # certified prime powers divides n-1, satisfies F*F >= n, and every
+  # prime factor +q+ of +F+ comes with a witness +a+ such that:
+  #
+  #   a**(n-1) % n == 1   and   gcd(a**((n-1)/q) - 1, n) == 1
+  #
+  # Factors up to SMALL_FACTOR_LIMIT are proven prime by the verifier
+  # itself, by trial division.  Larger factors must carry a recursive
+  # sub-certificate bound to exactly that integer.
+  #
+  # == Example
+  #
+  #   result = Prime::Pocklington.generate(20123)
+  #   result.proven?       #=> true
+  #   result.certificate   #=> {n: 20123, factors: [[2, 1], [10061, 1]], ...}
+  #
+  #   Prime::Pocklington.verify(result.certificate)  #=> true
+  #
+  #   result = Prime::Pocklington.generate(20078802347)
+  #   result.unproven?     #=> true (not enough factors of n-1 found)
+  #   # This is NOT a compositeness proof; passing the known factors
+  #   # of n-1 succeeds:
+  #   result = Prime::Pocklington.generate(20078802347,
+  #                                        known_factors: [[100003, 1], [100391, 1]])
+  #   result.proven?       #=> true
+  module Pocklington
+    # Factors of n-1 up to this limit are proven prime by the verifier
+    # itself, by trial division.  Larger factors require a recursive
+    # sub-certificate.
+    SMALL_FACTOR_LIMIT = 10_000
+
+    # How far the generator trial-divides n-1 when not enough known
+    # factors are supplied.
+    TRIAL_DIVISION_LIMIT = 100_000
+
+    # Largest base the generator tries while searching for witnesses.
+    MAX_WITNESS_SEARCH = 1_000
+
+    # Maximum nesting depth of sub-certificates.  Guards both sides
+    # against pathological or cyclic certificate data.
+    MAX_DEPTH = 256
+
+    # The outcome of Prime::Pocklington.generate.
+    #
+    # Note that there is no "composite" status: failing to build a
+    # certificate does not prove compositeness, it only means the
+    # primality could not be certified.
+    class GenerationResult
+      # <tt>:proven</tt> or <tt>:unproven</tt>.
+      attr_reader :status
+
+      # The certificate Hash when the result is proven?, nil otherwise.
+      attr_reader :certificate
+
+      # A human-readable explanation when the result is unproven?,
+      # nil otherwise.
+      attr_reader :reason
+
+      def initialize(status, certificate, reason) # :nodoc:
+        @status = status
+        @certificate = certificate
+        @reason = reason
+      end
+
+      # Whether a certificate was generated.
+      def proven?
+        @status == :proven
+      end
+
+      # Whether no certificate could be generated.  This says nothing
+      # about the compositeness of the number.
+      def unproven?
+        @status == :unproven
+      end
+    end
+
+    class << self
+      # Generates a Pocklington primality certificate for +n+.
+      #
+      # +known_factors+ may list known prime factors of n-1, in the
+      # <tt>[[p1, e1], [p2, e2], ...]</tt> format of Prime.prime_division;
+      # they are used in addition to the generator's own trial division.
+      # This is how a prover supplies its partial factorization of n-1.
+      #
+      # Returns a GenerationResult.  When the result is proven?,
+      # GenerationResult#certificate holds the certificate; when it is
+      # unproven?, GenerationResult#reason explains why no certificate
+      # could be built -- which does not mean +n+ is composite.
+      def generate(n, known_factors: nil)
+        unless n.is_a?(Integer) && n >= 2
+          return unproven_result("expected an Integer >= 2, got #{n.inspect}")
+        end
+        return proven_result(n: 2, factors: [], witnesses: [], sub_certificates: []) if n == 2
+        return unproven_result("#{n} is even and greater than 2") if n.even?
+        if known_factors
+          unless known_factors.is_a?(Array) && known_factors.all? { |pair|
+                   pair.is_a?(Array) && pair.first.is_a?(Integer) && pair.first >= 2
+                 }
+            raise ArgumentError,
+                  "expected known_factors to be [[p1, e1], [p2, e2], ...], got #{known_factors.inspect}"
+          end
+        end
+
+        build_certificate(n, known_factors, 0)
+      end
+
+      # Independently verifies a Pocklington certificate.
+      #
+      # The verifier only reads the certificate data; it uses no prover
+      # state, no cache, and no previously established result.  Returns
+      # true if the certificate proves its <tt>:n</tt> prime, and false
+      # otherwise, including for malformed certificates.
+      def verify(certificate)
+        verify_certificate(certificate, [])
+      end
+
+      private
+
+      def proven_result(certificate)
+        GenerationResult.new(:proven, certificate, nil)
+      end
+
+      def unproven_result(reason)
+        GenerationResult.new(:unproven, nil, reason)
+      end
+
+      # --- generation -------------------------------------------------
+
+      def build_certificate(n, known_factors, depth)
+        if depth >= MAX_DEPTH
+          return unproven_result("certificate chain exceeds MAX_DEPTH (#{MAX_DEPTH})")
+        end
+
+        factors = factorize_n_minus_1(n, known_factors)
+
+        # Certify every large factor recursively.  Factors that cannot be
+        # certified are dropped; the remaining ones may still cover n.
+        sub_certificates = []
+        factors = factors.select do |q, _exponent|
+          next true if q <= SMALL_FACTOR_LIMIT
+          result = build_certificate(q, nil, depth + 1)
+          sub_certificates << [q, result.certificate] if result.proven?
+          result.proven?
+        end
+
+        covered = factors.inject(1) { |product, (q, exponent)| product * q**exponent }
+        if covered * covered < n
+          return unproven_result(
+            "known factors of #{n}-1 only cover #{covered}, less than sqrt(#{n}); " +            "pass more known_factors of n-1"
+          )
+        end
+
+        witnesses = find_witnesses(n, factors)
+        unless witnesses
+          return unproven_result(
+            "no Pocklington witness found for #{n}; " +            "this is not a proof of compositeness"
+          )
+        end
+
+        proven_result(
+          n: n,
+          factors: factors,
+          witnesses: witnesses,
+          sub_certificates: sub_certificates
+        )
+      end
+
+      # Factors n-1 using the caller's known prime factors and trial
+      # division, and returns [[q1, e1], [q2, e2], ...] in ascending
+      # order.  The factorization may be partial.
+      def factorize_n_minus_1(n, known_factors)
+        rest = n - 1
+        factors = []
+
+        Array(known_factors).each do |pair|
+          q = pair.first
+          next unless rest % q == 0
+          next if q <= SMALL_FACTOR_LIMIT && !small_prime?(q)
+          exponent = 0
+          while rest % q == 0
+            rest /= q
+            exponent += 1
+          end
+          factors << [q, exponent]
+        end
+
+        generator = Prime::Generator23.new
+        generator.each do |p|
+          break if p > TRIAL_DIVISION_LIMIT || p * p > rest
+          next unless rest % p == 0
+          exponent = 0
+          while rest % p == 0
+            rest /= p
+            exponent += 1
+          end
+          factors << [p, exponent]
+        end
+
+        # A remaining cofactor is only used when its primality can be
+        # checked cheaply and deterministically.
+        if rest > 1 && rest.bit_length <= 80 && rest.prime?
+          factors << [rest, 1]
+        end
+
+        factors.sort_by!(&:first)
+        factors
+      end
+
+      # Finds, for every prime factor q of n-1 covered by +factors+, a
+      # base a with a**(n-1) % n == 1 and gcd(a**((n-1)/q) - 1, n) == 1.
+      # Returns [[q, a], ...], or nil when no witnesses are found.
+      def find_witnesses(n, factors)
+        pending = factors.map(&:first)
+        witnesses = []
+        base = 2
+        until pending.empty?
+          return nil if base > MAX_WITNESS_SEARCH || base >= n
+          # A failed Fermat test proves nothing usable here; give up.
+          return nil unless base.pow(n - 1, n) == 1
+          pending = pending.reject do |q|
+            next false unless (base.pow((n - 1) / q, n) - 1).gcd(n) == 1
+            witnesses << [q, base]
+            true
+          end
+          base += 1
+        end
+        witnesses
+      end
+
+      # --- verification -----------------------------------------------
+
+      def verify_certificate(certificate, chain)
+        return false unless certificate.is_a?(Hash)
+
+        n = certificate[:n]
+        factors = certificate[:factors]
+        witnesses = certificate[:witnesses]
+        sub_certificates = certificate[:sub_certificates]
+
+        return false unless n.is_a?(Integer) && n >= 2
+        return false unless factors.is_a?(Array) && witnesses.is_a?(Array)
+        return false unless sub_certificates.is_a?(Array)
+        return false if chain.include?(n) # cyclic reference
+        return false if chain.size >= MAX_DEPTH
+
+        if n == 2
+          return factors.empty? && witnesses.empty? && sub_certificates.empty?
+        end
+        return false if n.even?
+
+        # The claimed factors must be distinct primes in ascending order
+        # whose product divides n-1 and covers sqrt(n).
+        covered = 1
+        previous = 1
+        primes = []
+        factors.each do |entry|
+          return false unless entry.is_a?(Array) && entry.size == 2
+          q, exponent = entry
+          return false unless q.is_a?(Integer) && exponent.is_a?(Integer)
+          return false unless q >= 2 && exponent >= 1
+          return false unless q > previous
+          previous = q
+          return false if q <= SMALL_FACTOR_LIMIT && !small_prime?(q)
+          primes << q
+          exponent.times do
+            covered *= q
+            return false if covered >= n # F divides n-1, so F <= n-1
+          end
+        end
+        return false unless (n - 1) % covered == 0
+        return false if covered * covered < n
+
+        # Sub-certificates must be bound to one of the claimed factors,
+        # and every large factor must carry one.
+        bound = {}
+        sub_certificates.each do |entry|
+          return false unless entry.is_a?(Array) && entry.size == 2
+          q, sub = entry
+          return false unless q.is_a?(Integer) && sub.is_a?(Hash)
+          return false unless primes.include?(q)
+          return false if bound.key?(q)
+          return false unless sub[:n] == q
+          bound[q] = sub
+        end
+        primes.each do |q|
+          next if q <= SMALL_FACTOR_LIMIT
+          sub = bound.delete(q)
+          return false unless sub
+          return false unless verify_certificate(sub, chain + [n])
+        end
+        bound.each_value do |sub|
+          return false unless verify_certificate(sub, chain + [n])
+        end
+
+        # Every claimed prime factor needs exactly one in-range witness
+        # satisfying Pocklington's congruences.
+        return false unless witnesses.size == primes.size
+        seen = {}
+        witnesses.each do |entry|
+          return false unless entry.is_a?(Array) && entry.size == 2
+          q, a = entry
+          return false unless q.is_a?(Integer) && a.is_a?(Integer)
+          return false if seen.key?(q)
+          seen[q] = a
+        end
+        primes.each do |q|
+          a = seen[q]
+          return false unless a
+          return false unless a >= 2 && a <= n - 1
+          return false unless a.pow(n - 1, n) == 1
+          return false unless (a.pow((n - 1) / q, n) - 1).gcd(n) == 1
+        end
+
+        true
+      end
+
+      # Deterministic trial division, used by the verifier for factors
+      # up to SMALL_FACTOR_LIMIT.  Uses no external state.
+      def small_prime?(q)
+        return false unless q.is_a?(Integer) && q >= 2
+        i = 2
+        while i * i <= q
+          return false if (q % i).zero?
+          i += 1
+        end
+        true
+      end
+    end
+  end
 end

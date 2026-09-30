@@ -102,3 +102,37 @@ module RBSTypeTest
     end
   end
 end
+
+module RBSTypeTest
+  class PocklingtonSingletonTest < Test::Unit::TestCase
+    include RBS::UnitTest::TypeAssertions
+
+    library "singleton", "prime"
+    testing "singleton(::Prime::Pocklington)"
+
+    def test_generate
+      assert_send_type "(::Integer) -> ::Prime::Pocklington::GenerationResult",
+                       Prime::Pocklington, :generate, 20123
+      assert_send_type "(::Integer, known_factors: ::Array[[::Integer, ::Integer]]) -> ::Prime::Pocklington::GenerationResult",
+                       Prime::Pocklington, :generate, 20123, known_factors: [[2, 1], [10061, 1]]
+    end
+
+    def test_verify
+      assert_send_type "(untyped) -> bool",
+                       Prime::Pocklington, :verify, {}
+    end
+  end
+
+  class PocklingtonGenerationResultTest < Test::Unit::TestCase
+    include RBS::UnitTest::TypeAssertions
+
+    library "singleton", "prime"
+    testing "::Prime::Pocklington::GenerationResult"
+
+    def test_predicates
+      result = Prime::Pocklington.generate(20123)
+      assert_send_type "() -> bool", result, :proven?
+      assert_send_type "() -> bool", result, :unproven?
+    end
+  end
+end

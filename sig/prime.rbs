@@ -369,4 +369,80 @@ class Prime
   #
   class Generator23 < PseudoPrimeGenerator
   end
+
+  # <!-- rdoc-file=lib/prime.rb -->
+  # Generation and independent verification of Pocklington primality
+  # certificates.
+  #
+  # A certificate is a plain Hash with Symbol keys:
+  #
+  #     {
+  #       n:                20123,                  # the certified prime
+  #       factors:          [[2, 1], [10061, 1]],   # prime powers q**e dividing n-1
+  #       witnesses:        [[2, 2], [10061, 2]],   # one witness per prime factor
+  #       sub_certificates: [[10061, { ... }]]      # recursive proofs for large factors
+  #     }
+  #
+  module Pocklington
+    # Factors of n-1 up to this limit are proven prime by the verifier itself,
+    # by trial division.  Larger factors require a recursive sub-certificate.
+    SMALL_FACTOR_LIMIT: Integer
+
+    # How far the generator trial-divides n-1 when not enough known factors
+    # are supplied.
+    TRIAL_DIVISION_LIMIT: Integer
+
+    # Largest base the generator tries while searching for witnesses.
+    MAX_WITNESS_SEARCH: Integer
+
+    # Maximum nesting depth of sub-certificates.
+    MAX_DEPTH: Integer
+
+    # <!-- rdoc-file=lib/prime.rb -->
+    # The outcome of `Prime::Pocklington.generate`.
+    #
+    # Note that there is no "composite" status: failing to build a certificate
+    # does not prove compositeness, it only means the primality could not be
+    # certified.
+    #
+    class GenerationResult
+      # `:proven` or `:unproven`.
+      attr_reader status: Symbol
+
+      # The certificate Hash when the result is `proven?`, nil otherwise.
+      attr_reader certificate: Hash[Symbol, untyped]?
+
+      # A human-readable explanation when the result is `unproven?`, nil
+      # otherwise.
+      attr_reader reason: String?
+
+      # Whether a certificate was generated.
+      def proven?: () -> bool
+
+      # Whether no certificate could be generated.  This says nothing about
+      # the compositeness of the number.
+      def unproven?: () -> bool
+    end
+
+    # <!--
+    #   rdoc-file=lib/prime.rb
+    #   - generate(n, known_factors: nil)
+    # -->
+    # Generates a Pocklington primality certificate for `n`.
+    #
+    # `known_factors` may list known prime factors of n-1, in the
+    # `[[p1, e1], [p2, e2], ...]` format of Prime.prime_division.
+    #
+    def self.generate: (Integer n, ?known_factors: Array[[Integer, Integer]]?) -> GenerationResult
+
+    # <!--
+    #   rdoc-file=lib/prime.rb
+    #   - verify(certificate)
+    # -->
+    # Independently verifies a Pocklington certificate.  The verifier only
+    # reads the certificate data.  Returns true if the certificate proves its
+    # `:n` prime, and false otherwise, including for malformed certificates.
+    #
+    def self.verify: (untyped certificate) -> bool
+  end
 end
