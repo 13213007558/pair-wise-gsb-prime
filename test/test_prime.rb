@@ -147,6 +147,89 @@ class TestPrime < Test::Unit::TestCase
     assert_equal Prime.prime?(4), false
   end
 
+  def test_discrete_logarithm_small_prime_power_tables
+    primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47]
+
+    primes.each do |p|
+      (1...p).each do |g|
+        table = {}
+        value = 1
+        (0...p - 1).each do |exponent|
+          table[value] ||= exponent
+          value = value * g % p
+        end
+
+        (1...p).each do |h|
+          if table.key?(h)
+            x = Prime.discrete_logarithm(p, g, h)
+            assert_equal table[h], x
+            assert_equal h, g.pow(x, p)
+          else
+            assert_raise(Prime::DiscreteLogarithmNoSolutionError) do
+              Prime.discrete_logarithm(p, g, h)
+            end
+          end
+        end
+      end
+    end
+  end
+
+  def test_discrete_logarithm_nonprimitive_root
+    assert_equal 2, Prime.discrete_logarithm(13, 3, 9)
+    assert_equal 0, Prime.discrete_logarithm(13, 3, 1)
+    assert_equal 0, Prime.discrete_logarithm(13, 1, 1)
+    assert_raise(Prime::DiscreteLogarithmNoSolutionError) do
+      Prime.discrete_logarithm(13, 3, 2)
+    end
+  end
+
+  def test_discrete_logarithm_high_prime_power_factor
+    p = 1009
+    g = 11
+    h = g.pow(512, p)
+    x = Prime.discrete_logarithm(p, g, h)
+
+    assert_equal 512, x
+    assert_equal h, g.pow(x, p)
+  end
+
+  def test_discrete_logarithm_high_prime_power_factor_2_to_13
+    p = 40961
+    g = 3
+    h = g.pow(8191, p)
+    x = Prime.discrete_logarithm(p, g, h)
+
+    assert_equal 8191, x
+    assert_equal h, g.pow(x, p)
+  end
+
+  def test_discrete_logarithm_crt_and_alias
+    p = 859
+    g = 2
+    h = g.pow(123, p)
+    x = Prime.discrete_log(p, g, h)
+
+    assert_equal 123, x
+    assert_equal h, g.pow(x, p)
+    assert_equal 123, Prime.discrete_logarithm(p, 64, 716,
+                                               memory_budget: 4, work_budget: 8)
+    assert_raise(Prime::DiscreteLogarithmNoSolutionError) do
+      Prime.discrete_logarithm(p, 64, 2)
+    end
+  end
+
+  def test_discrete_logarithm_budget_exceeded
+    p = 607
+    g = 7
+    assert_raise(Prime::DiscreteLogarithmBudgetExceededError) do
+      Prime.discrete_logarithm(p, g, g, memory_budget: 4, work_budget: 8)
+    end
+
+    assert_raise(Prime::DiscreteLogarithmNoSolutionError) do
+      Prime.discrete_logarithm(p, g, 2, memory_budget: 4, work_budget: 8)
+    end
+  end
+
   class TestPseudoPrimeGenerator < Test::Unit::TestCase
     def test_upper_bound
       pseudo_prime_generator = Prime::PseudoPrimeGenerator.new(42)

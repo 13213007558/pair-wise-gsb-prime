@@ -48,6 +48,15 @@ class Prime
 
   extend Enumerable[Integer]
 
+  class DiscreteLogarithmError < StandardError
+  end
+
+  class DiscreteLogarithmNoSolutionError < DiscreteLogarithmError
+  end
+
+  class DiscreteLogarithmBudgetExceededError < DiscreteLogarithmError
+  end
+
   # <!--
   #   rdoc-file=lib/prime.rb
   #   - each(ubound = nil, generator = EratosthenesGenerator.new, &block)
@@ -234,6 +243,17 @@ class Prime
 
   # <!--
   #   rdoc-file=lib/prime.rb
+  #   - discrete_logarithm(p, g, h, generator = Prime::Generator23.new, memory_budget:, work_budget:)
+  # -->
+  # Returns x such that g**x is congruent to h modulo p. The result is the
+  # representative of the solution class modulo the order of g.
+  #
+  def self.discrete_logarithm: (Integer p, Integer g, Integer h, ?PseudoPrimeGenerator generator, ?memory_budget: Integer, ?work_budget: Integer) -> Integer
+
+  alias self.discrete_log self.discrete_logarithm
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
   #   - prime_division(value, generator = Prime::Generator23.new)
   # -->
   # Returns the factorization of `value`.
@@ -269,6 +289,17 @@ class Prime
   #     3**2 * 5                  #=> 45
   #
   def prime_division: (Integer, ?PseudoPrimeGenerator generator) -> Array[[ Integer, Integer ]]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - discrete_logarithm(p, g, h, generator = Prime::Generator23.new, memory_budget:, work_budget:)
+  # -->
+  # Returns x such that g**x is congruent to h modulo p. The result is the
+  # representative of the solution class modulo the order of g.
+  #
+  def discrete_logarithm: (Integer p, Integer g, Integer h, ?PseudoPrimeGenerator generator, ?memory_budget: Integer, ?work_budget: Integer) -> Integer
+
+  alias discrete_log discrete_logarithm
 
   # Returns the singleton instance.
   #
