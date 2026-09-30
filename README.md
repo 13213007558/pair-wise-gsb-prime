@@ -38,6 +38,15 @@ Prime.prime?(7)           #=> true
 Prime.prime_division(8959)                          #=> [[17, 2], [31, 1]]
 Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
+
+# Euler's totient and the Möbius function over an interval, computed with
+# a segmented sieve: only the primes up to the square root of the interval
+# end and one segment are kept in memory, so the interval may start very
+# large.  The optional segment_size keyword only affects memory and speed,
+# never the output.
+Prime.each_totient(1, 6).to_a       #=> [[1, 1], [2, 1], [3, 2], [4, 2], [5, 4], [6, 2]]
+Prime.each_mobius(1, 6).to_a        #=> [[1, 1], [2, -1], [3, -1], [4, 0], [5, -1], [6, 1]]
+Prime.each_totient(10**12, 10**12).to_a  #=> [[1000000000000, 400000000000]]
 ```
 
 ## Contributing

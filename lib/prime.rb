@@ -326,6 +326,127 @@ class Prime
     pv
   end
 
+  # The default number of integers processed per segment by
+  # Prime#each_totient and Prime#each_mobius.
+  DEFAULT_SEGMENT_SIZE = 4096
+
+  # Iterates over the integers in the range <code>lo..hi</code>, yielding
+  # each integer together with its Euler's totient function value.
+  #
+  #   Prime.each_totient(1, 6).to_a
+  #   #=> [[1, 1], [2, 1], [3, 2], [4, 2], [5, 4], [6, 2]]
+  #
+  # The values are computed with a segmented sieve: the range is processed
+  # in chunks of +segment_size+ integers and only the prime numbers up to
+  # the square root of +hi+ are sieved.  No table proportional to +hi+ is
+  # built, so a narrow range with a very large starting point is feasible:
+  #
+  #   Prime.each_totient(10**12, 10**12 + 2).to_a
+  #   #=> [[1000000000000, 400000000000], [1000000000001, 979102080000], [1000000000002, 333333333332]]
+  #
+  # == Parameters
+  # +lo+:: The first integer of the range.  Must be positive, unless the
+  #        range is empty.
+  # +hi+:: The last integer of the range.  Nothing is yielded when +hi+
+  #        is less than +lo+.
+  # +segment_size+:: Optional.  The number of integers processed per
+  #                  segment.  Must be a positive Integer.  It only
+  #                  affects memory usage and speed, not the output.
+  #
+  # Returns an Enumerator if no block is given.
+  #
+  # Raises ArgumentError if the range contains non-positive integers.
+  def each_totient(lo, hi, segment_size: nil)
+    check_segmented_range(lo, hi, segment_size)
+    return enum_for(:each_totient, lo, hi, segment_size: segment_size) {
+      lo > hi ? 0 : hi - lo + 1
+    } unless block_given?
+    each_segmented_phi_mu(lo, hi, segment_size) do |n, phi, _mu|
+      yield n, phi
+    end
+  end
+
+  # Iterates over the integers in the range <code>lo..hi</code>, yielding
+  # each integer together with its Möbius function value: 0 if the
+  # integer has a squared prime factor, otherwise (-1)**k where k is the
+  # number of its prime factors.
+  #
+  #   Prime.each_mobius(1, 6).to_a
+  #   #=> [[1, 1], [2, -1], [3, -1], [4, 0], [5, -1], [6, 1]]
+  #
+  # See Prime#each_totient for the parameters.  Both methods share the
+  # same segmented sieve, so memory usage does not depend on the
+  # magnitude of +lo+ or +hi+.
+  #
+  # Returns an Enumerator if no block is given.
+  #
+  # Raises ArgumentError if the range contains non-positive integers.
+  def each_mobius(lo, hi, segment_size: nil)
+    check_segmented_range(lo, hi, segment_size)
+    return enum_for(:each_mobius, lo, hi, segment_size: segment_size) {
+      lo > hi ? 0 : hi - lo + 1
+    } unless block_given?
+    each_segmented_phi_mu(lo, hi, segment_size) do |n, _phi, mu|
+      yield n, mu
+    end
+  end
+
+  # Checks the range and segment size shared by Prime#each_totient and
+  # Prime#each_mobius.
+  private def check_segmented_range(lo, hi, segment_size) # :nodoc:
+    raise ArgumentError, "Expected an integer, got #{lo.inspect}" unless lo.is_a?(Integer)
+    raise ArgumentError, "Expected an integer, got #{hi.inspect}" unless hi.is_a?(Integer)
+    unless segment_size.nil? || (segment_size.is_a?(Integer) && segment_size > 0)
+      raise ArgumentError, "segment_size must be a positive integer, got #{segment_size.inspect}"
+    end
+    if lo <= hi && lo < 1
+      raise ArgumentError, "range must not contain non-positive integers: #{lo}..#{hi}"
+    end
+  end
+
+  # Segmented sieve over the range <code>lo..hi</code>.  Yields each
+  # integer n in the range together with phi(n) and mu(n).  Only the
+  # small primes up to sqrt(hi) and O(segment_size) integers are held in
+  # memory.  After sieving out the small primes, a remaining cofactor
+  # larger than 1 is a prime factor of n appearing to the first power,
+  # and squared prime factors zero out the Möbius value.
+  private def each_segmented_phi_mu(lo, hi, segment_size) # :nodoc:
+    return if lo > hi
+    segment_size ||= DEFAULT_SEGMENT_SIZE
+    primes = each(Integer.sqrt(hi)).to_a
+    lo.step(hi, segment_size) do |seg_lo|
+      seg_hi = seg_lo + segment_size - 1
+      seg_hi = hi if seg_hi > hi
+      size = seg_hi - seg_lo + 1
+      phis = Array.new(size) {|i| seg_lo + i }
+      mus = Array.new(size, 1)
+      rems = Array.new(size) {|i| seg_lo + i }
+      primes.each do |prime|
+        break if prime * prime > seg_hi
+        index = (-seg_lo) % prime
+        while index < size
+          phis[index] = phis[index] / prime * (prime - 1)
+          rems[index] /= prime
+          if rems[index] % prime == 0
+            mus[index] = 0
+            rems[index] /= prime while rems[index] % prime == 0
+          else
+            mus[index] = -mus[index]
+          end
+          index += prime
+        end
+      end
+      size.times do |i|
+        rem = rems[i]
+        if rem > 1
+          phis[i] = phis[i] / rem * (rem - 1)
+          mus[i] = -mus[i]
+        end
+        yield seg_lo + i, phis[i], mus[i]
+      end
+    end
+  end
+
   # An abstract class for enumerating pseudo-prime numbers.
   #
   # Concrete subclasses should override succ, next, rewind.

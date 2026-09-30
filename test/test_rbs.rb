@@ -57,6 +57,36 @@ module RBSTypeTest
       assert_send_type "() -> ::Prime",
                        Prime, :instance
     end
+
+    def test_each_totient
+      assert_send_type(
+        "(::Integer, ::Integer) { (::Integer, ::Integer) -> void } -> void",
+        Prime, :each_totient, 1, 10, &proc {|n, phi| }
+      )
+      assert_send_type(
+        "(::Integer, ::Integer, segment_size: ::Integer?) { (::Integer, ::Integer) -> void } -> void",
+        Prime, :each_totient, 1, 10, segment_size: 3, &proc {|n, phi| }
+      )
+      assert_send_type(
+        "(::Integer, ::Integer) -> ::Enumerator[[::Integer, ::Integer], void]",
+        Prime, :each_totient, 1, 10
+      )
+    end
+
+    def test_each_mobius
+      assert_send_type(
+        "(::Integer, ::Integer) { (::Integer, ::Integer) -> void } -> void",
+        Prime, :each_mobius, 1, 10, &proc {|n, mu| }
+      )
+      assert_send_type(
+        "(::Integer, ::Integer, segment_size: ::Integer?) { (::Integer, ::Integer) -> void } -> void",
+        Prime, :each_mobius, 1, 10, segment_size: 3, &proc {|n, mu| }
+      )
+      assert_send_type(
+        "(::Integer, ::Integer) -> ::Enumerator[[::Integer, ::Integer], void]",
+        Prime, :each_mobius, 1, 10
+      )
+    end
   end
 
   class PrimeInstanceTest < Test::Unit::TestCase
@@ -99,6 +129,28 @@ module RBSTypeTest
     def test_prime_division
       assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
                        Prime.instance, :prime_division, 57
+    end
+
+    def test_each_totient
+      assert_send_type(
+        "(::Integer, ::Integer) { (::Integer, ::Integer) -> void } -> void",
+        Prime.instance, :each_totient, 1, 10, &proc {|n, phi| }
+      )
+      assert_send_type(
+        "(::Integer, ::Integer) -> ::Enumerator[[::Integer, ::Integer], void]",
+        Prime.instance, :each_totient, 1, 10
+      )
+    end
+
+    def test_each_mobius
+      assert_send_type(
+        "(::Integer, ::Integer) { (::Integer, ::Integer) -> void } -> void",
+        Prime.instance, :each_mobius, 1, 10, &proc {|n, mu| }
+      )
+      assert_send_type(
+        "(::Integer, ::Integer) -> ::Enumerator[[::Integer, ::Integer], void]",
+        Prime.instance, :each_mobius, 1, 10
+      )
     end
   end
 end

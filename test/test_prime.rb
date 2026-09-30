@@ -274,6 +274,130 @@ class TestPrime < Test::Unit::TestCase
     end if defined?(Ractor)
   end
 
+  class TestSegmentedMultiplicativeFunctions < Test::Unit::TestCase
+    # Per-number baselines computed through Prime.prime_division.
+    def phi_by_factorization(n)
+      Prime.prime_division(n, Prime::EratosthenesGenerator.new).inject(n) do |phi, (prime, _)|
+        phi / prime * (prime - 1)
+      end
+    end
+
+    def mu_by_factorization(n)
+      pd = Prime.prime_division(n, Prime::EratosthenesGenerator.new)
+      return 0 if pd.any? {|_, e| e > 1 }
+      pd.size.even? ? 1 : -1
+    end
+
+    def test_each_totient_matches_prime_division
+      Prime.each_totient(1, 1000) do |n, phi|
+        assert_equal phi_by_factorization(n), phi, "phi(#{n})"
+      end
+    end
+
+    def test_each_mobius_matches_prime_division
+      Prime.each_mobius(1, 1000) do |n, mu|
+        assert_equal mu_by_factorization(n), mu, "mu(#{n})"
+      end
+    end
+
+    def test_each_totient_divisor_sum_identity
+      # sum of phi(d) over the divisors d of n equals n
+      n_max = 500
+      phis = Prime.each_totient(1, n_max).map {|_, phi| phi }
+      sums = Array.new(n_max + 1, 0)
+      1.upto(n_max) do |d|
+        d.step(n_max, d) {|m| sums[m] += phis[d - 1] }
+      end
+      assert_equal (1..n_max).to_a, sums[1..-1]
+    end
+
+    def test_each_mobius_divisor_sum
+      # sum of mu(d) over the divisors d of n equals 1 for n == 1, else 0
+      n_max = 500
+      mus = Prime.each_mobius(1, n_max).map {|_, mu| mu }
+      sums = Array.new(n_max + 1, 0)
+      1.upto(n_max) do |d|
+        d.step(n_max, d) {|m| sums[m] += mus[d - 1] }
+      end
+      assert_equal [1] + [0] * (n_max - 1), sums[1..-1]
+    end
+
+    def test_segment_size_does_not_change_results
+      [[1, 1000], [999_983, 1_001_017]].each do |lo, hi|
+        expected_phis = Prime.each_totient(lo, hi).to_a
+        expected_mus = Prime.each_mobius(lo, hi).to_a
+        [1, 2, 7, 64, hi - lo + 1, 100_000].each do |segment_size|
+          assert_equal expected_phis, Prime.each_totient(lo, hi, segment_size: segment_size).to_a,
+                       "segment_size=#{segment_size}"
+          assert_equal expected_mus, Prime.each_mobius(lo, hi, segment_size: segment_size).to_a,
+                       "segment_size=#{segment_size}"
+        end
+      end
+    end
+
+    def test_large_start
+      # A table from 1 up to 10**12 could not be allocated; the segmented
+      # sieve only keeps the primes up to sqrt(hi) and one segment.
+      lo = 10**12 + 39
+      hi = lo + 100
+      Prime.each_totient(lo, hi) do |n, phi|
+        assert_equal phi_by_factorization(n), phi, "phi(#{n})"
+      end
+      Prime.each_mobius(lo, hi) do |n, mu|
+        assert_equal mu_by_factorization(n), mu, "mu(#{n})"
+      end
+    end
+
+    def test_range_starting_at_one
+      assert_equal [[1, 1], [2, 1], [3, 2], [4, 2], [5, 4], [6, 2]],
+                   Prime.each_totient(1, 6).to_a
+      assert_equal [[1, 1], [2, -1], [3, -1], [4, 0], [5, -1], [6, 1]],
+                   Prime.each_mobius(1, 6).to_a
+    end
+
+    def test_empty_interval
+      assert_equal [], Prime.each_totient(10, 5).to_a
+      assert_equal [], Prime.each_mobius(10, 5).to_a
+      assert_equal 0, Prime.each_totient(10, 5).size
+      Prime.each_totient(10, 5) {|*| flunk "must not yield for an empty interval" }
+      Prime.each_mobius(10, 5) {|*| flunk "must not yield for an empty interval" }
+    end
+
+    def test_rejects_non_positive_interval
+      assert_raise(ArgumentError) { Prime.each_totient(0, 10) }
+      assert_raise(ArgumentError) { Prime.each_totient(-5, 5) }
+      assert_raise(ArgumentError) { Prime.each_totient(0, 0) }
+      assert_raise(ArgumentError) { Prime.each_mobius(0, 10) }
+      assert_raise(ArgumentError) { Prime.each_mobius(-5, -1) }
+    end
+
+    def test_argument_checking
+      assert_raise(ArgumentError) { Prime.each_totient(1.5, 10) }
+      assert_raise(ArgumentError) { Prime.each_totient(1, "10") }
+      assert_raise(ArgumentError) { Prime.each_mobius(nil, 10) }
+      assert_raise(ArgumentError) { Prime.each_totient(1, 10, segment_size: 0) }
+      assert_raise(ArgumentError) { Prime.each_totient(1, 10, segment_size: -3) }
+      assert_raise(ArgumentError) { Prime.each_mobius(1, 10, segment_size: 1.5) }
+    end
+
+    def test_without_block_returns_enumerator
+      enum = Prime.each_totient(1, 10)
+      assert_kind_of Enumerator, enum
+      assert_equal 10, enum.size
+      assert_equal 10, enum.to_a.size
+
+      enum = Prime.each_mobius(1, 10)
+      assert_kind_of Enumerator, enum
+      assert_equal 10, enum.size
+      assert_equal 10, enum.to_a.size
+    end
+
+    def test_instance_method
+      assert_equal Prime.each_totient(1, 10).to_a, Prime.instance.each_totient(1, 10).to_a
+      assert_equal Prime.each_mobius(1, 10).to_a, Prime.instance.each_mobius(1, 10).to_a
+    end
+  end
+
   def test_eratosthenes_works_fine_after_timeout
     sieve = Prime::EratosthenesSieve.instance
     sieve.send(:initialize)
