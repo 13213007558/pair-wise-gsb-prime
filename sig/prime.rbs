@@ -234,6 +234,26 @@ class Prime
 
   # <!--
   #   rdoc-file=lib/prime.rb
+  #   - square_root_count(a, m, generator = Prime::Generator23.new)
+  # -->
+  # Returns the exact number of solutions `x` of `x**2 ≡ a (mod m)` in the
+  # complete residue system `0 <= x < m`.
+  #
+  def self.square_root_count: (Integer a, Integer m, ?PseudoPrimeGenerator generator) -> Integer
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - square_roots(a, m, generator = Prime::Generator23.new)
+  # -->
+  # Iterates over all integer solutions `x` of `x**2 ≡ a (mod m)` where
+  # `0 <= x < m`. Without a block, returns a finite Enumerator whose size is the
+  # exact number of solutions.
+  #
+  def self.square_roots: (Integer a, Integer m, ?PseudoPrimeGenerator generator) { (Integer) -> void } -> nil
+                      | (Integer a, Integer m, ?PseudoPrimeGenerator generator) -> Enumerator[Integer, untyped]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
   #   - prime_division(value, generator = Prime::Generator23.new)
   # -->
   # Returns the factorization of `value`.
@@ -269,6 +289,26 @@ class Prime
   #     3**2 * 5                  #=> 45
   #
   def prime_division: (Integer, ?PseudoPrimeGenerator generator) -> Array[[ Integer, Integer ]]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - square_root_count(a, m, generator = Prime::Generator23.new)
+  # -->
+  # Returns the exact number of solutions `x` of `x**2 ≡ a (mod m)` in the
+  # complete residue system `0 <= x < m`.
+  #
+  def square_root_count: (Integer a, Integer m, ?PseudoPrimeGenerator generator) -> Integer
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - square_roots(a, m, generator = Prime::Generator23.new)
+  # -->
+  # Iterates over all integer solutions `x` of `x**2 ≡ a (mod m)` where
+  # `0 <= x < m`. Without a block, returns a finite Enumerator whose size is the
+  # exact number of solutions.
+  #
+  def square_roots: (Integer a, Integer m, ?PseudoPrimeGenerator generator) { (Integer) -> void } -> nil
+                   | (Integer a, Integer m, ?PseudoPrimeGenerator generator) -> Enumerator[Integer, untyped]
 
   # Returns the singleton instance.
   #

@@ -299,4 +299,141 @@ class TestPrime < Test::Unit::TestCase
 
     assert_not_include Prime.each(7*37).to_a, 7*37, "[ruby-dev:39465]"
   end
+
+  def brute_force_square_roots(a, m)
+    (0...m).select { |x| x ** 2 % m == a % m }
+  end
+
+  def assert_square_roots(a, m)
+    expected = brute_force_square_roots(a, m)
+    roots = Prime.square_roots(a, m)
+    actual = roots.to_a
+    assert_equal expected.sort, actual.sort
+    assert_equal actual, actual.uniq
+    assert actual.all? { |x| x.between?(0, m - 1) }
+    assert_equal expected.length, roots.size
+    assert_equal expected.length, Prime.square_root_count(a, m)
+  end
+
+  def test_square_roots_small_moduli
+    (1..200).each do |m|
+      (0...m).each do |a|
+        assert_square_roots(a, m)
+      end
+    end
+  end
+
+  def test_square_roots_normalize_a_and_accept_blocks
+    assert_equal [1, 3, 5, 7], Prime.square_roots(-7, 8).to_a.sort
+    roots = []
+    assert_nil Prime.square_roots(1, 8) { |x| roots << x }
+    assert_equal [1, 3, 5, 7], roots.sort
+  end
+
+  def test_square_roots_modulus_one_and_no_solutions
+    assert_equal [0], Prime.square_roots(0, 1).to_a
+    assert_equal [0], Prime.square_roots(7, 1).to_a
+    assert_equal 1, Prime.square_root_count(7, 1)
+    assert_equal [], Prime.square_roots(2, 4).to_a
+    assert_equal 0, Prime.square_root_count(2, 4)
+    assert_equal 0, Prime.square_roots(2, 4).size
+  end
+
+  def test_square_roots_non_coprime_prime_powers
+    assert_square_roots(12, 72)
+    assert_square_roots(18, 72)
+    assert_square_roots(0, 144)
+    assert_square_roots(36, 144)
+  end
+
+  def test_square_roots_large_odd_prime_powers
+    p = 101
+    e = 5
+    m = p ** e
+
+    roots = Prime.square_roots(4, m).to_a.sort
+    assert_equal [2, m - 2], roots
+    assert_equal 2, Prime.square_root_count(4, m)
+
+    a = p ** 2 * 4
+    roots = Prime.square_roots(a, m)
+    all_roots = roots.to_a
+    assert_equal 2 * p, all_roots.length
+    assert_equal all_roots, all_roots.uniq
+    assert(all_roots.all? { |x| x ** 2 % m == a })
+
+    roots = Prime.square_roots(0, m)
+    zero_roots = roots.to_a
+    assert_equal p ** 2, zero_roots.length
+    assert_equal zero_roots, zero_roots.uniq
+    assert(zero_roots.all? { |x| x ** 2 % m == 0 })
+
+    assert_equal 0, Prime.square_root_count(p * 2, p ** 3)
+    assert_equal 0, Prime.square_root_count(2, p ** 3)
+  end
+
+  def test_square_roots_instance_and_custom_generator
+    enum = Prime.instance.square_roots(1, 15, Prime::TrialDivisionGenerator.new)
+    assert_equal 4, enum.size
+    assert_equal [1, 4, 11, 14], enum.to_a.sort
+    assert_equal 4, Prime.instance.square_root_count(1, 15,
+                                                       Prime::TrialDivisionGenerator.new)
+  end
+
+  def test_square_roots_large_power_of_two
+    e = 100
+    m = 2 ** e
+    assert_equal [1, m / 2 - 1, m / 2 + 1, m - 1],
+                 Prime.square_roots(1, m).to_a.sort
+    assert_equal 4, Prime.square_root_count(1, m)
+
+    a = 4
+    roots = Prime.square_roots(a, m)
+    expected_roots = [
+      2,
+      2 ** 98 - 2,
+      2 ** 98 + 2,
+      2 ** 99 - 2,
+      2 ** 99 + 2,
+      3 * 2 ** 98 - 2,
+      3 * 2 ** 98 + 2,
+      m - 2
+    ]
+    assert_equal expected_roots, roots.to_a.sort
+    assert_equal 8, roots.size
+    assert_equal 8, Prime.square_root_count(a, m)
+
+    roots = Prime.square_roots(0, m)
+    assert_equal 2 ** 50, roots.size
+    first = roots.first(30)
+    assert_equal 30, first.length
+    assert_equal first, first.uniq
+    assert(first.all? { |x| x ** 2 % m == 0 })
+
+    roots = Prime.square_roots(2 ** 98, m)
+    assert_equal 2 ** 50, roots.size
+    first = roots.first(30)
+    assert_equal 30, first.length
+    assert_equal first, first.uniq
+    assert(first.all? { |x| x ** 2 % m == 2 ** 98 })
+
+    assert_equal 0, Prime.square_root_count(3, 2 ** 20)
+  end
+
+  def test_square_roots_are_lazy_and_unique
+    m = PRIMES[1, 40].inject(:*)
+    roots = Prime.square_roots(1, m)
+    assert_equal 2 ** 40, roots.size
+    first = roots.first(5)
+    assert_equal 5, first.length
+    assert_equal first, first.uniq
+    assert(first.all? { |x| x ** 2 % m == 1 })
+  end
+
+  def test_square_roots_arguments
+    assert_raise(ArgumentError) { Prime.square_roots(1, 0) }
+    assert_raise(ArgumentError) { Prime.square_roots(1, -2) }
+    assert_raise(ArgumentError) { Prime.square_roots(1.0, 2) }
+    assert_raise(ArgumentError) { Prime.square_roots(1, 2, Object.new) }
+  end
 end

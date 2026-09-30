@@ -326,6 +326,306 @@ class Prime
     pv
   end
 
+  # Iterates over all integer solutions +x+ of
+  #
+  #   x**2 ≡ a (mod m)
+  #
+  # where 0 <= x < m. Without a block, returns an Enumerator whose
+  # Enumerator#size is the exact number of solutions.
+  #
+  # The solutions are generated lazily and are never duplicated, even when
+  # +a+ and +m+ are not coprime. For m == 1 the only residue is 0.
+  #
+  # == Parameters
+  # +a+:: An arbitrary integer.
+  # +m+:: A positive integer modulus.
+  # +generator+:: Optional. A pseudo-prime generator used to factor +m+.
+  #
+  # === Exceptions
+  # +ArgumentError+:: when +m+ is not positive or +a+ is not an integer.
+  #
+  # == Example
+  #
+  #   Prime.square_roots(1, 8).to_a #=> [1, 3, 5, 7]
+  #   Prime.square_roots(4, 16).size #=> 4
+  #
+  def square_roots(a, m, generator = Prime::Generator23.new)
+    unless a.respond_to?(:integer?) && a.integer?
+      raise ArgumentError, "Expected an integer, got #{a}"
+    end
+    unless m.respond_to?(:integer?) && m.integer? && m >= 1
+      raise ArgumentError, "Expected a positive integer modulus, got #{m}"
+    end
+    unless generator.respond_to?(:each)
+      raise ArgumentError, "Expected a prime generator, got #{generator}"
+    end
+
+    contexts = square_root_contexts(a % m, m, generator)
+    count = contexts.inject(1) { |result, context| result * context.count }
+
+    unless block_given?
+      return Enumerator.new(count) do |yielder|
+        each_square_root_combination(contexts, m) { |root| yielder << root }
+      end
+    end
+
+    each_square_root_combination(contexts, m) { |root| yield root }
+    nil
+  end
+
+  # Returns the exact number of solutions +x+ of
+  #
+  #   x**2 ≡ a (mod m)
+  #
+  # in the complete residue system 0 <= x < m.
+  #
+  # == Parameters
+  # +a+:: An arbitrary integer.
+  # +m+:: A positive integer modulus.
+  # +generator+:: Optional. A pseudo-prime generator used to factor +m+.
+  #
+  # === Exceptions
+  # +ArgumentError+:: when +m+ is not positive or +a+ is not an integer.
+  #
+  def square_root_count(a, m, generator = Prime::Generator23.new)
+    unless a.respond_to?(:integer?) && a.integer?
+      raise ArgumentError, "Expected an integer, got #{a}"
+    end
+    unless m.respond_to?(:integer?) && m.integer? && m >= 1
+      raise ArgumentError, "Expected a positive integer modulus, got #{m}"
+    end
+    unless generator.respond_to?(:each)
+      raise ArgumentError, "Expected a prime generator, got #{generator}"
+    end
+
+    square_root_contexts(a % m, m, generator).inject(1) do |count, context|
+      count * context.count
+    end
+  end
+
+  LocalSquareRoots = Struct.new(:modulus, :bases, :stride, :q_count, :crt_inverse, :prefix) do
+    def count
+      bases.length * q_count
+    end
+
+    def root_at(index)
+      q, base_index = index.divmod(bases.length)
+      bases[base_index] + q * stride
+    end
+
+  end
+  private_constant :LocalSquareRoots
+
+  private
+
+  def square_root_contexts(a, m, generator)
+    prefix = 1
+    prime_division(m, generator).map do |prime, exponent|
+      local_modulus = prime ** exponent
+      context =
+        if prime == 2
+          power_of_two_square_roots(a, exponent)
+        else
+          odd_prime_power_square_roots(a, prime, exponent)
+        end
+      context.crt_inverse = modular_inverse(prefix % local_modulus, local_modulus)
+      context.prefix = prefix
+      prefix *= local_modulus
+      context
+    end
+  end
+
+  def each_square_root_combination(contexts, m)
+    total = contexts.inject(1) { |count, context| count * context.count }
+    index = 0
+    while index < total
+      value = 0
+      remaining = index
+      contexts.each do |context|
+        remaining, local_index = remaining.divmod(context.count)
+        root = context.root_at(local_index)
+        value += context.prefix *
+          (((root - value) * context.crt_inverse) % context.modulus)
+      end
+      yield(value % m)
+      index += 1
+    end
+  end
+
+  def odd_prime_power_square_roots(a, prime, exponent)
+    modulus = prime ** exponent
+    if a == 0
+      stride = prime ** ((exponent + 1) / 2)
+      return LocalSquareRoots.new(modulus, [0], stride, prime ** (exponent / 2))
+    end
+    valuation = valuation_of(a, prime)
+
+    if valuation >= exponent
+      stride = prime ** ((exponent + 1) / 2)
+      return LocalSquareRoots.new(modulus, [0], stride, prime ** (exponent / 2))
+    end
+
+    return no_square_roots(modulus) if valuation.odd?
+
+    k = valuation / 2
+    remaining_exponent = exponent - valuation
+    unit = a / (prime ** valuation)
+    root = square_root_mod_prime_power(unit, prime, remaining_exponent)
+    return no_square_roots(modulus) if root.nil?
+
+    remaining_modulus = prime ** remaining_exponent
+    bases = [root, remaining_modulus - root].sort.map { |value| value * (prime ** k) }
+    stride = prime ** (exponent - k)
+    LocalSquareRoots.new(modulus, bases, stride, prime ** k)
+  end
+
+  def power_of_two_square_roots(a, exponent)
+    modulus = 2 ** exponent
+    if a == 0
+      stride = 2 ** ((exponent + 1) / 2)
+      return LocalSquareRoots.new(modulus, [0], stride, 2 ** (exponent / 2))
+    end
+    valuation = valuation_of(a, 2)
+
+    if valuation >= exponent
+      stride = 2 ** ((exponent + 1) / 2)
+      return LocalSquareRoots.new(modulus, [0], stride, 2 ** (exponent / 2))
+    end
+
+    return no_square_roots(modulus) if valuation.odd?
+
+    k = valuation / 2
+    remaining_exponent = exponent - valuation
+    unit = a / (2 ** valuation)
+    roots = odd_square_roots_mod_power_of_two(unit, remaining_exponent)
+    return no_square_roots(modulus) if roots.empty?
+
+    bases = roots.map { |root| root * (2 ** k) }
+    stride = 2 ** (exponent - k)
+    LocalSquareRoots.new(modulus, bases, stride, 2 ** k)
+  end
+
+  def no_square_roots(modulus)
+    LocalSquareRoots.new(modulus, [], 1, 0)
+  end
+
+  def valuation_of(value, prime)
+    valuation = 0
+    while value % prime == 0
+      value /= prime
+      valuation += 1
+    end
+    valuation
+  end
+
+  def square_root_mod_prime_power(unit, prime, exponent)
+    root = square_root_mod_prime(unit % prime, prime)
+    return nil if root.nil?
+
+    modulus = prime
+    target_modulus = prime ** exponent
+    target = unit % target_modulus
+    while modulus < target_modulus
+      inverse = modular_inverse((2 * root) % prime, prime)
+      correction = (((target - root ** 2) / modulus) * inverse) % prime
+      root += correction * modulus
+      modulus *= prime
+    end
+    root
+  end
+
+  def square_root_mod_prime(unit, prime)
+    unit %= prime
+    return unit if unit == 0
+    return 0 if prime == 2
+
+    legendre = unit.pow((prime - 1) / 2, prime)
+    return nil unless legendre == 1 || legendre == prime - 1
+    return nil if legendre == prime - 1
+
+    return unit.pow((prime + 1) / 4, prime) if prime % 4 == 3
+
+    q = prime - 1
+    s = 0
+    while q.even?
+      q /= 2
+      s += 1
+    end
+
+    z = 2
+    z += 1 while z.pow((prime - 1) / 2, prime) != prime - 1
+
+    m = s
+    c = z.pow(q, prime)
+    t = unit.pow(q, prime)
+    r = unit.pow((q + 1) / 2, prime)
+
+    until t == 1
+      i = 1
+      square = t
+      while i < m
+        square = square.pow(2, prime)
+        break if square == 1
+        i += 1
+      end
+      return nil if i == m
+
+      b = c.pow(1 << (m - i - 1), prime)
+      m = i
+      c = b.pow(2, prime)
+      t = t * c % prime
+      r = r * b % prime
+    end
+
+    r
+  end
+
+  def odd_square_roots_mod_power_of_two(unit, exponent)
+    case exponent
+    when 1
+      [1]
+    when 2
+      unit % 4 == 1 ? [1, 3] : []
+    else
+      return [] unless unit % 8 == 1
+
+      roots = [1, 3, 5, 7]
+      modulus = 8
+      k = 4
+      while k <= exponent
+        next_modulus = modulus * 2
+        target = unit % next_modulus
+        roots = roots.flat_map do |root|
+          [root, root + modulus].select do |candidate|
+            candidate.pow(2, next_modulus) == target
+          end
+        end
+        modulus = next_modulus
+        k += 1
+      end
+      roots.sort.uniq
+    end
+  end
+
+  def modular_inverse(value, modulus)
+    return 0 if modulus == 1
+
+    original_modulus = modulus
+    old_r = value % modulus
+    r = modulus
+    old_x = 1
+    x = 0
+
+    until r == 0
+      quotient = old_r / r
+      old_r, r = r, old_r - quotient * r
+      old_x, x = x, old_x - quotient * x
+    end
+
+    raise ArgumentError, "#{value} has no inverse modulo #{original_modulus}" unless old_r == 1
+    old_x % original_modulus
+  end
+
   # An abstract class for enumerating pseudo-prime numbers.
   #
   # Concrete subclasses should override succ, next, rewind.
