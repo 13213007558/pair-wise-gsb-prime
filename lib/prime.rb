@@ -171,6 +171,8 @@ class Prime
 
   VERSION = "0.1.4"
 
+  DEFAULT_SEGMENT_SIZE = 10_000
+
   include Enumerable
   include Singleton
 
@@ -324,6 +326,194 @@ class Prime
       pv.push [value, 1]
     end
     pv
+  end
+
+  # Iterates over +[number, phi, mu]+ for every integer in an interval,
+  # where +phi+ is Euler's totient function and +mu+ is the Möbius function.
+  #
+  # The interval is processed in segments. Only primes up to
+  # <tt>Integer.sqrt(upper_bound)</tt> and arrays of length +block_size+ are
+  # retained; no table from 1 to the upper bound is constructed.
+  #
+  # Accepts either a Range or lower and upper bounds. An empty interval
+  # returns an empty Enumerator.
+  def each_phi_and_mu(first = nil, last = nil, positional_block_size = nil,
+                      block_size: nil)
+    unless block_given?
+      selected_first, selected_last, selected_block_size =
+        segmented_phi_mu_arguments(first, last, positional_block_size, block_size)
+      return enum_for(__method__, selected_first, selected_last, selected_block_size) do
+        SegmentedPhiMu.range_size(selected_first, selected_last)
+      end
+    end
+
+    first, last, block_size =
+      segmented_phi_mu_arguments(first, last, positional_block_size, block_size)
+    SegmentedPhiMu.new(first, last, block_size).each do |number, phi, mu|
+      yield number, phi, mu
+    end
+  end
+
+  # Iterates over +[number, phi]+ in an interval. See #each_phi_and_mu.
+  def each_phi(first = nil, last = nil, positional_block_size = nil,
+               block_size: nil)
+    unless block_given?
+      selected_first, selected_last, selected_block_size =
+        segmented_phi_mu_arguments(first, last, positional_block_size, block_size)
+      return enum_for(__method__, selected_first, selected_last, selected_block_size) do
+        SegmentedPhiMu.range_size(selected_first, selected_last)
+      end
+    end
+
+    first, last, block_size =
+      segmented_phi_mu_arguments(first, last, positional_block_size, block_size)
+    each_phi_and_mu(first, last, block_size) do |number, phi,|
+      yield number, phi
+    end
+  end
+
+  # Iterates over +[number, mu]+ in an interval. See #each_phi_and_mu.
+  def each_mu(first = nil, last = nil, positional_block_size = nil,
+              block_size: nil)
+    unless block_given?
+      selected_first, selected_last, selected_block_size =
+        segmented_phi_mu_arguments(first, last, positional_block_size, block_size)
+      return enum_for(__method__, selected_first, selected_last, selected_block_size) do
+        SegmentedPhiMu.range_size(selected_first, selected_last)
+      end
+    end
+
+    first, last, block_size =
+      segmented_phi_mu_arguments(first, last, positional_block_size, block_size)
+    each_phi_and_mu(first, last, block_size) do |number, _phi, mu|
+      yield number, mu
+    end
+  end
+
+  private
+
+  def segmented_phi_mu_arguments(first, last, positional_block_size, keyword_block_size)
+    if first.is_a?(Range) && !last.nil?
+      unless positional_block_size.nil? && keyword_block_size.nil?
+        raise ArgumentError, "block_size given twice"
+      end
+      return first, nil, last
+    end
+
+    unless positional_block_size.nil? || keyword_block_size.nil?
+      raise ArgumentError, "block_size given twice"
+    end
+
+    block_size = positional_block_size || keyword_block_size || DEFAULT_SEGMENT_SIZE
+    [first, last, block_size]
+  end
+
+  # Performs a segmented sieve for Euler's totient and Möbius functions.
+  class SegmentedPhiMu
+    include Enumerable
+
+    def self.range_bounds(first, last)
+      case first
+      when Range
+        raise ArgumentError, "upper bound must be omitted when passing a Range" unless last.nil?
+        low = first.begin
+        high = first.end
+        high -= 1 if first.exclude_end?
+      when Integer
+        low = last.nil? ? 1 : first
+        high = last.nil? ? first : last
+      else
+        raise ArgumentError, "expected an Integer or Range, got #{first.inspect}"
+      end
+
+      unless low.is_a?(Integer) && high.is_a?(Integer)
+        raise ArgumentError, "interval bounds must be integers"
+      end
+
+      [low, high]
+    end
+
+    def self.range_size(first, last)
+      low, high = range_bounds(first, last)
+      low <= high ? high - low + 1 : 0
+    end
+
+    def initialize(first, last, block_size = Prime::DEFAULT_SEGMENT_SIZE)
+      unless block_size.is_a?(Integer) && block_size > 0
+        raise ArgumentError, "block_size must be a positive integer"
+      end
+
+      @low, @high = self.class.range_bounds(first, last)
+      if @low <= @high && @low < 1
+        raise ArgumentError, "interval must not contain non-positive integers"
+      end
+
+      @block_size = block_size
+    end
+
+    def size
+      @low <= @high ? @high - @low + 1 : 0
+    end
+
+    def each
+      return enum_for(:each) { size } unless block_given?
+      return self if @low > @high
+
+      segment_start = @low
+
+      while segment_start <= @high
+        segment_end = [segment_start + @block_size - 1, @high].min
+        sieve_segment(segment_start, segment_end) do |number, phi, mu|
+          yield number, phi, mu
+        end
+        segment_start = segment_end + 1
+      end
+
+      self
+    end
+
+    private
+
+    def sieve_segment(segment_start, segment_end)
+      segment_size = segment_end - segment_start + 1
+      remaining = Array.new(segment_size) { |index| segment_start + index }
+      phi = remaining.dup
+      mu = Array.new(segment_size, 1)
+
+      Prime.each(Integer.sqrt(@high)) do |prime|
+        break if prime * prime > segment_end
+
+        first_multiple = ((segment_start + prime - 1) / prime) * prime
+        first_multiple.step(segment_end, prime) do |number|
+          index = number - segment_start
+          value = remaining[index]
+          next if value == 1
+          next unless value % prime == 0
+
+          phi[index] = phi[index] / prime * (prime - 1)
+          exponent = 0
+          while value % prime == 0
+            value /= prime
+            exponent += 1
+          end
+          remaining[index] = value
+          if exponent > 1
+            mu[index] = 0
+          else
+            mu[index] = -mu[index]
+          end
+        end
+      end
+
+      segment_size.times do |index|
+        prime = remaining[index]
+        if prime > 1
+          phi[index] = phi[index] / prime * (prime - 1)
+          mu[index] = -mu[index]
+        end
+        yield segment_start + index, phi[index], mu[index]
+      end
+    end
   end
 
   # An abstract class for enumerating pseudo-prime numbers.

@@ -48,6 +48,8 @@ class Prime
 
   extend Enumerable[Integer]
 
+  DEFAULT_SEGMENT_SIZE: Integer
+
   # <!--
   #   rdoc-file=lib/prime.rb
   #   - each(ubound = nil, generator = EratosthenesGenerator.new, &block)
@@ -79,6 +81,21 @@ class Prime
   def self.each: (?Integer? ubound, ?PseudoPrimeGenerator generator) { (Integer) -> void } -> void
                 | (?Integer? ubound, ?PseudoPrimeGenerator generator) -> PseudoPrimeGenerator
 
+  def self.each_phi_and_mu: (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer, Integer) -> void } -> void
+                         | (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer, Integer], Prime]
+                         | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer, Integer) -> void } -> void
+                         | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer, Integer], Prime]
+
+  def self.each_phi: (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer) -> void } -> void
+                 | (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer], Prime]
+                 | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer) -> void } -> void
+                 | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer], Prime]
+
+  def self.each_mu: (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer) -> void } -> void
+                | (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer], Prime]
+                | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer) -> void } -> void
+                | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer], Prime]
+
   # <!--
   #   rdoc-file=lib/prime.rb
   #   - each(ubound = nil, generator = EratosthenesGenerator.new, &block)
@@ -109,6 +126,21 @@ class Prime
   #
   def each: (?Integer? ubound, ?PseudoPrimeGenerator generator) { (Integer) -> void } -> void
           | (?Integer? ubound, ?PseudoPrimeGenerator generator) -> PseudoPrimeGenerator
+
+  def each_phi_and_mu: (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer, Integer) -> void } -> void
+                    | (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer, Integer], Prime]
+                    | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer, Integer) -> void } -> void
+                    | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer, Integer], Prime]
+
+  def each_phi: (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer) -> void } -> void
+              | (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer], Prime]
+              | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer) -> void } -> void
+              | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer], Prime]
+
+  def each_mu: (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer) -> void } -> void
+             | (Integer first, ?Integer? last, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer], Prime]
+             | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) { (Integer, Integer) -> void } -> void
+             | (Range[Integer] first, ?Integer _block_size, ?block_size: Integer?) -> Enumerator[[Integer, Integer], Prime]
 
   # <!--
   #   rdoc-file=lib/prime.rb
@@ -269,6 +301,21 @@ class Prime
   #     3**2 * 5                  #=> 45
   #
   def prime_division: (Integer, ?PseudoPrimeGenerator generator) -> Array[[ Integer, Integer ]]
+
+  class SegmentedPhiMu
+    include Enumerable[[Integer, Integer, Integer]]
+
+    def self.range_bounds: (Integer | Range[Integer] first, ?Integer? last) -> [Integer, Integer]
+
+    def self.range_size: (Integer | Range[Integer] first, ?Integer? last) -> Integer
+
+    def initialize: (Integer | Range[Integer] first, ?Integer? last, ?Integer block_size) -> void
+
+    def size: () -> Integer
+
+    def each: () { (Integer, Integer, Integer) -> void } -> void
+          | () -> Enumerator[[Integer, Integer, Integer], self]
+  end
 
   # Returns the singleton instance.
   #

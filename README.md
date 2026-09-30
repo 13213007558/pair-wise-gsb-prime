@@ -38,6 +38,14 @@ Prime.prime?(7)           #=> true
 Prime.prime_division(8959)                          #=> [[17, 2], [31, 1]]
 Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
+
+# Batch Euler totient phi and Möbius mu for a narrow interval.
+# Values are generated in blocks; no table up to the interval end is built.
+Prime.each_phi_and_mu(1_000_000..1_000_010, block_size: 4).to_a
+#=> [[1000000, 400000, 0], [1000001, 969000, 1], ...]
+
+Prime.each_phi(1..10).to_a  #=> [[1, 1], [2, 1], ..., [10, 4]]
+Prime.each_mu(1..10).to_a   #=> [[1, 1], [2, -1], ..., [10, 1]]
 ```
 
 ## Contributing

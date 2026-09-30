@@ -299,4 +299,112 @@ class TestPrime < Test::Unit::TestCase
 
     assert_not_include Prime.each(7*37).to_a, 7*37, "[ruby-dev:39465]"
   end
+
+  class TestSegmentedPhiMu < Test::Unit::TestCase
+    def reference_phi_and_mu(number)
+      factors = number.prime_division
+      phi = factors.inject(1) do |result, (prime, exponent)|
+        result * (prime - 1) * prime ** (exponent - 1)
+      end
+      mu = if factors.any? { |_, exponent| exponent > 1 }
+             0
+           elsif factors.size.odd?
+             -1
+           else
+             1
+           end
+      [phi, mu]
+    end
+
+    def reference_values(low, high)
+      (low..high).map do |number|
+        phi, mu = reference_phi_and_mu(number)
+        [number, phi, mu]
+      end
+    end
+
+    def test_matches_factorization_for_small_sample
+      expected = reference_values(1, 200)
+      values = Prime.each_phi_and_mu(1, 200).to_a
+
+      assert_equal expected, values
+      assert_equal 1, values.first[1]
+      assert_equal 1, values.first[2]
+    end
+
+    def test_results_are_independent_of_block_size
+      expected = reference_values(99_800, 100_500)
+
+      [1, 2, 7, 128, 10_000].each do |block_size|
+        assert_equal expected,
+                     Prime.each_phi_and_mu(99_800, 100_500, block_size: block_size).to_a
+        assert_equal expected,
+                     Prime.each_phi_and_mu(99_800, 100_500, block_size).to_a
+        assert_equal expected,
+                     Prime.each_phi_and_mu(99_800..100_500, block_size: block_size).to_a
+        assert_equal expected,
+                     Prime.each_phi_and_mu(99_800..100_500, block_size).to_a
+      end
+    end
+
+    def test_phi_identity_is_sum_of_phi_of_divisor_count
+      values = Prime.each_phi(1, 200).to_h
+      (1..200).each do |number|
+        divisor_sum = (1..number).select { |divisor| number % divisor == 0 }.sum { |divisor| values[divisor] }
+        assert_equal number, divisor_sum
+      end
+    end
+
+    def test_mu_divisor_sum
+      values = Prime.each_mu(1, 200).to_h
+      (1..200).each do |number|
+        divisor_sum = (1..number).select { |divisor| number % divisor == 0 }.sum { |divisor| values[divisor] }
+        assert_equal number == 1 ? 1 : 0, divisor_sum
+      end
+    end
+
+    def test_remaining_large_prime_and_square
+      values = Prime.each_phi_and_mu(100_000, 100_500, block_size: 37)
+                          .map { |number, phi, mu| [number, [phi, mu]] }
+                          .to_h
+
+      assert_equal [100_003, 100_002, -1], [100_003, *values[100_003]]
+      assert_equal [100_042, 50_020, 1], [100_042, *values[100_042]]
+      assert_equal [100_489, 100_172, 0], [100_489, *values[100_489]]
+    end
+
+    def test_range_and_single_upper_bound
+      assert_equal reference_values(10, 20), Prime.each_phi_and_mu(10...21).to_a
+      assert_equal [[1, 1, 1], [2, 1, -1]], Prime.each_phi_and_mu(2).to_a.first(2)
+      assert_equal reference_values(1, 2), Prime.each_phi_and_mu(2).to_a
+    end
+
+    def test_empty_interval
+      assert_equal [], Prime.each_phi_and_mu(10, 1).to_a
+      assert_equal [], Prime.each_phi_and_mu(10...10).to_a
+      assert_equal 0, Prime.each_phi_and_mu(10, 1).size
+    end
+
+    def test_rejects_non_positive_intervals_and_bad_block_size
+      assert_raise(ArgumentError) { Prime.each_phi_and_mu(0, 10).to_a }
+      assert_raise(ArgumentError) { Prime.each_phi_and_mu(-1, 10).to_a }
+      assert_raise(ArgumentError) { Prime.each_phi_and_mu(0, 0).to_a }
+      assert_equal [], Prime.each_phi_and_mu(0, -1).to_a
+      assert_raise(ArgumentError) { Prime.each_phi_and_mu(1, 10, block_size: 0).to_a }
+      assert_raise(ArgumentError) { Prime.each_phi_and_mu(1, 10, block_size: -1).to_a }
+      assert_raise(ArgumentError) { Prime.each_phi_and_mu(1, 10, 2, block_size: 3).to_a }
+      assert_raise(ArgumentError) { Prime.each_phi_and_mu(1..10, 2, block_size: 3).to_a }
+    end
+
+    def test_does_not_allocate_table_to_upper_bound
+      low = 1_000_000_000
+      high = low + 63
+      sieve = Prime::EratosthenesSieve.instance
+      sieve.send(:initialize)
+      Prime.each_phi_and_mu(low, high, block_size: 16).to_a
+
+      assert sieve.instance_variable_get(:@max_checked) < 100_000
+      assert_equal 64, Prime.each_phi_and_mu(low, high, block_size: 16).size
+    end
+  end
 end
