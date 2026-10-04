@@ -147,6 +147,76 @@ class TestPrime < Test::Unit::TestCase
     assert_equal Prime.prime?(4), false
   end
 
+  def test_sum_of_two_squares
+    # no representation: a prime factor q == 3 (mod 4) has an odd exponent
+    assert_equal([], Prime.sum_of_two_squares(3))
+    assert_equal([], Prime.sum_of_two_squares(21))  # 3 * 7
+    assert_equal([], Prime.sum_of_two_squares(75))  # 3 * 5**2
+
+    # axis-only representations
+    assert_equal([[0, 0]], Prime.sum_of_two_squares(0))
+    assert_equal([[0, 1]], Prime.sum_of_two_squares(1))
+    assert_equal([[0, 3]], Prime.sum_of_two_squares(9))   # 3**2
+    assert_equal([[0, 13], [5, 12]], Prime.sum_of_two_squares(169)) # 13**2
+
+    # single off-axis representation
+    assert_equal([[1, 1]], Prime.sum_of_two_squares(2))
+    assert_equal([[3, 6]], Prime.sum_of_two_squares(45))  # 3**2 * 5
+
+    # multiple representations, listed once each and sorted
+    assert_equal([[0, 5], [3, 4]], Prime.sum_of_two_squares(25))
+    assert_equal([[1, 7], [5, 5]], Prime.sum_of_two_squares(50))
+    assert_equal([[2, 11], [5, 10]], Prime.sum_of_two_squares(125))
+    assert_equal([[1, 18], [6, 17], [10, 15]], Prime.sum_of_two_squares(325))
+    assert_equal([[0, 65], [16, 63], [25, 60], [33, 56], [39, 52]],
+                 Prime.sum_of_two_squares(4225)) # 5**2 * 13**2
+
+    assert_raise(ArgumentError) { Prime.sum_of_two_squares(-1) }
+    assert_raise(ArgumentError) { Prime.sum_of_two_squares(1.5) }
+  end
+
+  def test_sum_of_two_squares_exhaustive
+    0.upto(2000) do |n|
+      expected = []
+      0.upto(Integer.sqrt(n)) do |a|
+        b = Integer.sqrt(n - a * a)
+        expected << [a, b] if a <= b && a * a + b * b == n
+      end
+      assert_equal(expected, Prime.sum_of_two_squares(n), "n=#{n}")
+    end
+  end
+
+  def test_sum_of_two_squares_large_prime_factors
+    # p and q are primes == 1 (mod 4); a naive scan to sqrt(n) would be
+    # linear in these values, while factoring only needs to reach them.
+    p = 1_000_033
+    q = 1_000_133
+
+    # n = p**4 ~ 10**24, so sqrt(n) ~ 10**12
+    pairs = Timeout.timeout(10) { Prime.sum_of_two_squares(p**4) }
+    assert_equal(3, pairs.size)
+    assert_equal(pairs.uniq.sort, pairs)
+    pairs.each do |a, b|
+      assert_operator(a, :<=, b)
+      assert_equal(p**4, a * a + b * b)
+    end
+    assert_include(pairs, [0, p * p])
+
+    # n = p * q ~ 10**12: two distinct split primes, two representations
+    pairs = Timeout.timeout(10) { Prime.sum_of_two_squares(p * q) }
+    assert_equal(2, pairs.size)
+    pairs.each do |a, b|
+      assert_equal(p * q, a * a + b * b)
+    end
+
+    # a single large prime == 1 (mod 4): exactly one representation
+    big = 10**12 + 61
+    pairs = Timeout.timeout(10) { Prime.sum_of_two_squares(big) }
+    assert_equal(1, pairs.size)
+    a, b = pairs[0]
+    assert_equal(big, a * a + b * b)
+  end
+
   class TestPseudoPrimeGenerator < Test::Unit::TestCase
     def test_upper_bound
       pseudo_prime_generator = Prime::PseudoPrimeGenerator.new(42)

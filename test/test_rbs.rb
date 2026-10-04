@@ -57,6 +57,11 @@ module RBSTypeTest
       assert_send_type "() -> ::Prime",
                        Prime, :instance
     end
+
+    def test_sum_of_two_squares
+      assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
+                       Prime, :sum_of_two_squares, 50
+    end
   end
 
   class PrimeInstanceTest < Test::Unit::TestCase
@@ -99,6 +104,11 @@ module RBSTypeTest
     def test_prime_division
       assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
                        Prime.instance, :prime_division, 57
+    end
+
+    def test_sum_of_two_squares
+      assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
+                       Prime.instance, :sum_of_two_squares, 50
     end
   end
 end

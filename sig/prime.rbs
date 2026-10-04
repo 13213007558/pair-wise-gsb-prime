@@ -234,6 +234,23 @@ class Prime
 
   # <!--
   #   rdoc-file=lib/prime.rb
+  #   - sum_of_two_squares(value)
+  # -->
+  # Returns all representations of `value` as a sum of two squares of
+  # non-negative integers.
+  #
+  # Each representation is a pair `[a, b]` of non-negative integers with
+  # `a <= b` and `a**2 + b**2 == value`. The pairs are sorted in
+  # ascending order, and each unordered pair is listed only once.
+  #
+  # ## Parameters
+  # `value`
+  # :   A non-negative integer.
+  #
+  def self.sum_of_two_squares: (Integer value) -> Array[[ Integer, Integer ]]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
   #   - prime_division(value, generator = Prime::Generator23.new)
   # -->
   # Returns the factorization of `value`.
@@ -269,6 +286,23 @@ class Prime
   #     3**2 * 5                  #=> 45
   #
   def prime_division: (Integer, ?PseudoPrimeGenerator generator) -> Array[[ Integer, Integer ]]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - sum_of_two_squares(value)
+  # -->
+  # Returns all representations of `value` as a sum of two squares of
+  # non-negative integers.
+  #
+  # Each representation is a pair `[a, b]` of non-negative integers with
+  # `a <= b` and `a**2 + b**2 == value`. The pairs are sorted in
+  # ascending order, and each unordered pair is listed only once.
+  #
+  # ## Parameters
+  # `value`
+  # :   A non-negative integer.
+  #
+  def sum_of_two_squares: (Integer value) -> Array[[ Integer, Integer ]]
 
   # Returns the singleton instance.
   #

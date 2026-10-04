@@ -326,6 +326,129 @@ class Prime
     pv
   end
 
+  # Returns all representations of +value+ as a sum of two squares of
+  # non-negative integers.
+  #
+  # Each representation is a pair +[a, b]+ of non-negative integers with
+  # <tt>a <= b</tt> and <tt>a**2 + b**2 == value</tt>.  The pairs are
+  # sorted in ascending order, and each unordered pair is listed only
+  # once.
+  #
+  # The representations are computed from the prime factorization of
+  # +value+, not by brute-force trial of all candidates up to
+  # <tt>sqrt(value)</tt>:
+  #
+  # * A prime factor <tt>q == 3 (mod 4)</tt> with an odd exponent makes
+  #   +value+ inexpressible, so an empty array is returned.
+  # * Each prime factor <tt>p == 1 (mod 4)</tt> is written as
+  #   <tt>p == r**2 + s**2</tt> (Cornacchia-Smith algorithm), i.e. split
+  #   into the Gaussian primes <tt>r + s*i</tt> and <tt>r - s*i</tt>.
+  # * Distributing the exponent of each such +p+ between the two
+  #   conjugate Gaussian primes yields every Gaussian integer of norm
+  #   +value+, hence every representation.  Gaussian unit multiples and
+  #   conjugates collapse to the same pair after normalization, so
+  #   duplicates are dropped.
+  #
+  # == Parameters
+  # +value+:: A non-negative integer.
+  #
+  # == Exceptions
+  # +ArgumentError+:: when +value+ is not a non-negative integer.
+  #
+  # == Example
+  #
+  #   Prime.sum_of_two_squares(50)   #=> [[1, 7], [5, 5]]
+  #   Prime.sum_of_two_squares(21)   #=> []
+  #   1**2 + 7**2                    #=> 50
+  #   5**2 + 5**2                    #=> 50
+  #
+  def sum_of_two_squares(value)
+    raise ArgumentError, "Expected an integer, got #{value}" unless value.is_a?(Integer)
+    raise ArgumentError, "Expected a non-negative integer, got #{value}" if value < 0
+    return [[0, 0]] if value == 0
+
+    # Accumulator for the Gaussian integer factor which has a single
+    # possible value: (1 + i)**e2 times q**(eq/2) for each q == 3 (mod 4).
+    base = [1, 0]
+    # [r, s, exponent] for each prime p == 1 (mod 4), p == r**2 + s**2.
+    split_factors = []
+
+    prime_division(value).each do |prime, exponent|
+      case prime % 4
+      when 2 # prime == 2, ramified: 2 == -i * (1 + i)**2
+        exponent.times do
+          base = [base[0] - base[1], base[0] + base[1]]
+        end
+      when 1
+        split_factors << gaussian_prime_split(prime).push(exponent)
+      when 3
+        # Inert prime: must occur to an even power, contributing the
+        # rational integer factor q**(exponent/2).
+        return [] if exponent.odd?
+        base = base.map {|coord| coord * prime**(exponent / 2) }
+      end
+    end
+
+    pairs = {}
+    collect_gaussian_splits(split_factors, 0, base, pairs)
+    pairs.keys.sort
+  end
+
+  # Splits a prime <tt>p == 1 (mod 4)</tt> into +[r, s]+ with
+  # <tt>p == r**2 + s**2</tt>, using the Cornacchia-Smith algorithm.
+  private def gaussian_prime_split(p)
+    # Find a square root of -1 modulo p: for any quadratic non-residue
+    # z, z**((p-1)/4) has order 4.
+    z = 2
+    z += 1 while z.pow((p - 1) / 2, p) != p - 1
+    x = z.pow((p - 1) / 4, p)
+
+    # The Euclidean algorithm on p and x first drops below sqrt(p) at r.
+    r0, r1 = p, x
+    r0, r1 = r1, r0 % r1 while r1 * r1 > p
+    s = Integer.sqrt(p - r1 * r1)
+    [r1, s]
+  end
+
+  # Enumerates every way to distribute the exponent of each split prime
+  # between the conjugate Gaussian primes (r + s*i)**c * (r - s*i)**(e-c),
+  # multiplies them onto +z+, and records each resulting pair exactly
+  # once in +pairs+ (a Hash used as a set of sorted [a, b] keys).
+  private def collect_gaussian_splits(factors, index, z, pairs)
+    if index == factors.size
+      a, b = z.map!(&:abs).sort!
+      pairs[[a, b]] = true
+      return
+    end
+
+    r, s, exponent = factors[index]
+    pi_power = [1, 0]      # (r + s*i)**c
+    pibar_power = [1, 0]   # (r - s*i)**(exponent - c)
+    powers = [[pi_power, pibar_power]]
+    exponent.times do
+      pi_power = [pi_power[0] * r - pi_power[1] * s, pi_power[0] * s + pi_power[1] * r]
+      pibar_power = [pibar_power[0] * r + pibar_power[1] * s, pibar_power[1] * r - pibar_power[0] * s]
+      powers << [pi_power, pibar_power]
+    end
+
+    0.upto(exponent) do |c|
+      pr, pi = powers[c][0]
+      qr, qi = powers[exponent - c][1]
+      # z * (r + s*i)**c * (r - s*i)**(exponent - c)
+      mr = pr * qr - pi * qi
+      mi = pr * qi + pi * qr
+      collect_gaussian_splits(factors, index + 1,
+                              [z[0] * mr - z[1] * mi, z[0] * mi + z[1] * mr],
+                              pairs)
+    end
+  end
+
+  # The method_added hook above delegates every instance method to the
+  # singleton; keep the internal helpers private there as well.
+  class << self
+    private :gaussian_prime_split, :collect_gaussian_splits
+  end
+
   # An abstract class for enumerating pseudo-prime numbers.
   #
   # Concrete subclasses should override succ, next, rewind.
