@@ -326,6 +326,219 @@ class Prime
     pv
   end
 
+  # Returns the exact Bernoulli number +B_n+ as a Rational.
+  #
+  # The standard convention is used, so +B1+ is Rational(-1, 2).
+  #
+  #   Prime.bernoulli_number(0) #=> (1/1)
+  #   Prime.bernoulli_number(1) #=> (-1/2)
+  #   Prime.bernoulli_number(2) #=> (1/6)
+  def bernoulli_number(order)
+    bernoulli_calculator[order]
+  end
+
+  # Returns Bernoulli numbers from +B0+ through +B_n+ as exact Rational values.
+  # Without an argument, returns a reusable Prime::Bernoulli calculator which
+  # retains all previously generated intermediate values.
+  #
+  #   numbers = Prime.bernoulli_numbers
+  #   numbers[10]
+  #   numbers.upto(8)
+  def bernoulli_numbers(upto = nil)
+    upto ? bernoulli_calculator.upto(upto) : bernoulli_calculator
+  end
+
+  # Returns the Faulhaber sum 1**power + 2**power + ... + upper**power.
+  # Both endpoints 1 and +upper+ are included when +upper+ is positive; zero or
+  # a negative upper limit denotes an empty range and returns Rational(0).
+  #
+  #   Prime.faulhaber_sum(1, 10) #=> (55/1)
+  def faulhaber_sum(power, upper)
+    Rational(faulhaber_calculator.sum(power, upper))
+  end
+  alias faulhaber faulhaber_sum
+
+  # Returns the exact sum of integer powers in an inclusive interval.
+  #
+  # With three arguments, both +lower+ and +upper+ are included. An interval
+  # whose lower endpoint is greater than its upper endpoint is empty and
+  # returns Rational(0). A Range honors Range#exclude_end?.
+  #
+  #   Prime.power_sum(2, -2, 2)     #=> (10/1)
+  #   Prime.power_sum(2, -2...2)    #=> (6/1)
+  def power_sum(power, lower, upper = nil)
+    Rational(faulhaber_calculator.power_sum(power, lower, upper))
+  end
+
+  def bernoulli_calculator # :nodoc:
+    @bernoulli_calculator ||= Prime::Bernoulli.new
+  end
+
+  def faulhaber_calculator # :nodoc:
+    @faulhaber_calculator ||= Prime::Faulhaber.new(bernoulli_calculator)
+  end
+
+  # Exact Rational Bernoulli number calculator.
+  class Bernoulli
+    def initialize
+      @numbers = [Rational(1)]
+    end
+
+    # Returns B_n, generating and retaining all values through n.
+    def [](order)
+      validate_order(order)
+      generate(order)
+      @numbers[order]
+    end
+
+    # Returns B0 through Bn without exposing the cached mutable state.
+    def upto(order)
+      validate_order(order)
+      generate(order)
+      @numbers[0..order]
+    end
+
+    include Enumerable
+
+    def each(&block)
+      return enum_for(:each) unless block_given?
+      order = 0
+      loop do
+        yield self[order]
+        order += 1
+      end
+    end
+
+    # Returns the von Staudt-Clausen terms 1/p for a positive, even order,
+    # where p is prime and p-1 divides order.
+    def von_staudt_clausen_terms(order)
+      validate_order(order)
+      raise ArgumentError, "order must be a positive even integer" unless order.positive? && order.even?
+
+      Prime.each(order + 1).select { |prime|
+        order % (prime - 1) == 0
+      }.map { |prime| Rational(1, prime) }
+    end
+
+    # Verifies B_order + sum(1/p) is an integer and that the product of those
+    # primes is the reduced denominator of B_order.
+    def von_staudt_clausen_valid?(order)
+      number = self[order]
+      terms = von_staudt_clausen_terms(order)
+      denominator = terms.inject(1) { |product, term| product * term.denominator }
+
+      (number + terms.sum).denominator == 1 && number.denominator == denominator
+    end
+
+    def self.binomial(n, k) # :nodoc:
+      return 0 if k < 0 || k > n
+      k = [k, n - k].min
+      (1..k).inject(1) { |result, index|
+        result * (n - k + index) / index
+      }
+    end
+    private_class_method :binomial
+
+    private
+
+    def validate_order(order)
+      unless order.is_a?(Integer) && order >= 0
+        raise ArgumentError, "expected a non-negative Integer, got #{order.inspect}"
+      end
+    end
+
+    def generate(order)
+      while @numbers.length <= order
+        current = @numbers.length
+        sum = Rational(0)
+        (0...current).each do |k|
+          sum += self.class.send(:binomial, current + 1, k) * @numbers[k]
+        end
+        @numbers << -sum / (current + 1)
+      end
+    end
+  end
+
+  # Exact Rational Faulhaber power-sum calculator.
+  class Faulhaber
+    def initialize(bernoulli_numbers = Prime::Bernoulli.new)
+      @bernoulli_numbers = bernoulli_numbers
+      @coefficients = []
+    end
+
+    # Returns the inclusive sum from 1 through upper. Zero and negative upper
+    # give an empty sum.
+    def sum(power, upper)
+      validate_power(power)
+      validate_integer(upper, "upper")
+      return Rational(0) if upper <= 0
+
+      power.zero? ? Rational(upper) : polynomial_value(power, upper)
+    end
+
+    # Returns the inclusive sum from lower through upper, or the sum covered
+    # by the given Range.
+    def power_sum(power, lower, upper = nil)
+      validate_power(power)
+
+      if lower.is_a?(Range)
+        range_sum(power, lower)
+      else
+        validate_integer(lower, "lower")
+        validate_integer(upper, "upper")
+        return Rational(0) if lower > upper
+
+        if power.zero?
+          Rational(upper - lower + 1)
+        else
+          polynomial_value(power, upper) - polynomial_value(power, lower - 1)
+        end
+      end
+    end
+
+    # Returns the sum covered by range. A two-dot range includes its end; a
+    # three-dot range excludes it.
+    def range_sum(power, range)
+      lower = range.begin
+      upper = range.end
+      validate_integer(lower, "lower")
+      validate_integer(upper, "upper")
+      upper -= 1 if range.exclude_end?
+      power_sum(power, lower, upper)
+    end
+
+    private
+
+    def validate_power(power)
+      unless power.is_a?(Integer) && power >= 0
+        raise ArgumentError, "expected a non-negative Integer power, got #{power.inspect}"
+      end
+    end
+
+    def validate_integer(value, name)
+      unless value.is_a?(Integer)
+        raise ArgumentError, "expected #{name} to be an Integer, got #{value.inspect}"
+      end
+    end
+
+    def polynomial_value(power, value)
+      coefficients(power).inject(Rational(0)) { |result, coefficient|
+        result * value + coefficient
+      } * value
+    end
+
+    def coefficients(power)
+      @coefficients[power] ||= begin
+        coefficients = (0..power).map do |index|
+          coefficient = Rational(Prime::Bernoulli.send(:binomial, power + 1, index)) *
+            @bernoulli_numbers[index] / (power + 1)
+          index.odd? ? -coefficient : coefficient
+        end
+        coefficients.map!(&:freeze).freeze
+      end
+    end
+  end
+
   # An abstract class for enumerating pseudo-prime numbers.
   #
   # Concrete subclasses should override succ, next, rewind.

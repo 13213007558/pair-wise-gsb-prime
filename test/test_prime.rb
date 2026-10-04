@@ -147,6 +147,110 @@ class TestPrime < Test::Unit::TestCase
     assert_equal Prime.prime?(4), false
   end
 
+  def test_bernoulli_numbers_are_exact_rationals
+    expected = {
+      0 => Rational(1),
+      1 => Rational(-1, 2),
+      2 => Rational(1, 6),
+      3 => Rational(0),
+      4 => Rational(-1, 30),
+      5 => Rational(0),
+      6 => Rational(1, 42),
+      8 => Rational(-1, 30),
+      10 => Rational(5, 66),
+      12 => Rational(-691, 2730),
+      14 => Rational(7, 6)
+    }
+
+    expected.each do |order, value|
+      result = Prime.bernoulli_number(order)
+      assert_equal value, result
+      assert_instance_of Rational, result
+    end
+
+    numbers = Prime.bernoulli_numbers(6)
+    assert_equal expected.values_at(0, 1, 2, 3, 4, 5, 6), numbers
+    assert(numbers.all? { |number| number.is_a?(Rational) })
+  end
+
+  def test_bernoulli_calculator_reuses_generated_values
+    calculator = Prime.bernoulli_numbers
+    assert_kind_of Prime::Bernoulli, calculator
+
+    assert_equal Rational(-691, 2730), calculator[12]
+    assert_equal [
+      Rational(1), Rational(-1, 2), Rational(1, 6), Rational(0),
+      Rational(-1, 30), Rational(0), Rational(1, 42), Rational(0),
+      Rational(-1, 30), Rational(0)
+    ], calculator.upto(9)
+    assert_same calculator, Prime.bernoulli_numbers
+  end
+
+  def test_even_bernoulli_numbers_satisfy_von_staudt_clausen
+    calculator = Prime::Bernoulli.new
+
+    (2..20).step(2) do |order|
+      terms = calculator.von_staudt_clausen_terms(order)
+      denominator = terms.inject(1) { |product, term| product * term.denominator }
+
+      assert_equal denominator, Prime.bernoulli_number(order).denominator
+      assert_equal 1, (Prime.bernoulli_number(order) + terms.sum).denominator
+      assert calculator.von_staudt_clausen_valid?(order)
+    end
+
+    assert_equal [Rational(1, 2), Rational(1, 3), Rational(1, 5),
+                  Rational(1, 7), Rational(1, 13)],
+                 calculator.von_staudt_clausen_terms(12)
+  end
+
+  def test_faulhaber_sum_uses_one_through_positive_upper
+    assert_equal Rational(0), Prime.faulhaber_sum(0, -3)
+    assert_equal Rational(0), Prime.faulhaber_sum(0, 0)
+    assert_equal Rational(3), Prime.faulhaber_sum(0, 3)
+    assert_equal Rational(0), Prime.faulhaber_sum(1, 0)
+    assert_equal Rational(55), Prime.faulhaber_sum(1, 10)
+    assert_equal Rational(385), Prime.faulhaber_sum(2, 10)
+    assert_equal Rational(3025), Prime.faulhaber_sum(3, 10)
+
+    0.upto(6) do |power|
+      0.upto(12) do |upper|
+        result = Prime.faulhaber_sum(power, upper)
+        expected = (1..upper).sum { |number| number ** power }.to_r
+        assert_equal expected, result
+        assert_instance_of Rational, result
+      end
+    end
+  end
+
+  def test_power_sum_includes_negative_endpoints_and_represents_empty_ranges
+    assert_equal Rational(0), Prime.power_sum(1, -2, 2)
+    assert_equal Rational(10), Prime.power_sum(2, -2, 2)
+    assert_equal Rational(5), Prime.power_sum(0, -2, 2)
+    assert_equal Rational(10), Prime.power_sum(2, -2..2)
+    assert_equal Rational(6), Prime.power_sum(2, -2...2)
+
+    assert_equal Rational(0), Prime.power_sum(3, 5, 4)
+    assert_equal Rational(0), Prime.power_sum(3, 5...5)
+    assert_equal Rational(0), Prime.power_sum(0, 5, 4)
+
+    [-2, 0, 2].each do |lower|
+      lower.upto(3) do |upper|
+        0.upto(5) do |power|
+          expected = lower.upto(upper).sum { |number| number ** power }.to_r
+          assert_equal expected, Prime.power_sum(power, lower, upper)
+          assert_instance_of Rational, Prime.power_sum(power, lower, upper)
+        end
+      end
+    end
+  end
+
+  def test_exact_power_series_interfaces_reject_floats
+    assert_raise(ArgumentError) { Prime.bernoulli_number(1.0) }
+    assert_raise(ArgumentError) { Prime.faulhaber_sum(2, 3.0) }
+    assert_raise(ArgumentError) { Prime.power_sum(2, 1.0, 3) }
+    assert_raise(ArgumentError) { Prime.power_sum(2, 1.0..3) }
+  end
+
   class TestPseudoPrimeGenerator < Test::Unit::TestCase
     def test_upper_bound
       pseudo_prime_generator = Prime::PseudoPrimeGenerator.new(42)

@@ -53,6 +53,21 @@ module RBSTypeTest
                        Prime, :prime_division, 57
     end
 
+    def test_bernoulli_numbers_and_power_sums
+      assert_send_type "(::Integer) -> ::Rational",
+                       Prime, :bernoulli_number, 1
+      assert_send_type "(::Integer) -> ::Array[::Rational]",
+                       Prime, :bernoulli_numbers, 4
+      assert_send_type "() -> ::Prime::Bernoulli",
+                       Prime, :bernoulli_numbers
+      assert_send_type "(::Integer, ::Integer) -> ::Rational",
+                       Prime, :faulhaber_sum, 2, 10
+      assert_send_type "(::Integer, ::Integer, ::Integer) -> ::Rational",
+                       Prime, :power_sum, 2, -2, 2
+      assert_send_type "(::Integer, ::Range[::Integer]) -> ::Rational",
+                       Prime, :power_sum, 2, (-2...2)
+    end
+
     def test_instance
       assert_send_type "() -> ::Prime",
                        Prime, :instance
@@ -99,6 +114,21 @@ module RBSTypeTest
     def test_prime_division
       assert_send_type "(::Integer) -> ::Array[[ ::Integer, ::Integer ]]",
                        Prime.instance, :prime_division, 57
+    end
+
+    def test_bernoulli_numbers_and_power_sums
+      assert_send_type "(::Integer) -> ::Rational",
+                       Prime.instance, :bernoulli_number, 1
+      assert_send_type "(::Integer) -> ::Array[::Rational]",
+                       Prime.instance, :bernoulli_numbers, 4
+      assert_send_type "() -> ::Prime::Bernoulli",
+                       Prime.instance, :bernoulli_numbers
+      assert_send_type "(::Integer, ::Integer) -> ::Rational",
+                       Prime.instance, :faulhaber_sum, 2, 10
+      assert_send_type "(::Integer, ::Integer, ::Integer) -> ::Rational",
+                       Prime.instance, :power_sum, 2, -2, 2
+      assert_send_type "(::Integer, ::Range[::Integer]) -> ::Rational",
+                       Prime.instance, :power_sum, 2, (-2...2)
     end
   end
 end

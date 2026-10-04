@@ -38,6 +38,14 @@ Prime.prime?(7)           #=> true
 Prime.prime_division(8959)                          #=> [[17, 2], [31, 1]]
 Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
+
+# Exact Bernoulli numbers and Faulhaber power sums
+Prime.bernoulli_number(1)                           #=> (-1/2)
+Prime.bernoulli_numbers(4)                          #=> [1, -1/2, 1/6, 0, -1/30]
+Prime::Bernoulli.new.von_staudt_clausen_valid?(12) #=> true
+Prime.faulhaber_sum(2, 10)                          #=> (385/1) # 1^2 + ... + 10^2
+Prime.power_sum(2, -2, 2)                           #=> (10/1)  # includes both endpoints
+Prime.power_sum(2, -2...2)                          #=> (6/1)   # excludes 2
 ```
 
 ## Contributing

@@ -136,6 +136,23 @@ class Prime
   #
   def self.int_from_prime_division: (Array[[ Integer, Integer ]]) -> (Integer | Rational)
 
+  # Returns the exact Bernoulli number B_n. The standard convention B1 = -1/2
+  # is used.
+  def self.bernoulli_number: (Integer order) -> Rational
+
+  # Returns B0 through Bn, or a reusable calculator when no order is given.
+  def self.bernoulli_numbers: (Integer upto) -> Array[Rational]
+                       | () -> Bernoulli
+
+  # Returns 1**power through upper**power as an exact Rational.
+  def self.faulhaber_sum: (Integer power, Integer upper) -> Rational
+
+  def self.faulhaber: (Integer power, Integer upper) -> Rational
+
+  # Returns the exact inclusive power sum over an interval or Range.
+  def self.power_sum: (Integer power, Integer lower, ?Integer? upper) -> Rational
+                 | (Integer power, Range[Integer]) -> Rational
+
   # <!--
   #   rdoc-file=lib/prime.rb
   #   - int_from_prime_division(pd)
@@ -161,6 +178,18 @@ class Prime
   #     3**2 * 5                                         #=> 45
   #
   def int_from_prime_division: (Array[[ Integer, Integer ]]) -> (Integer | Rational)
+
+  def bernoulli_number: (Integer order) -> Rational
+
+  def bernoulli_numbers: (Integer upto) -> Array[Rational]
+                    | () -> Bernoulli
+
+  def faulhaber_sum: (Integer power, Integer upper) -> Rational
+
+  alias faulhaber faulhaber_sum
+
+  def power_sum: (Integer power, Integer lower, ?Integer? upper) -> Rational
+             | (Integer power, Range[Integer]) -> Rational
 
   # <!--
   #   rdoc-file=lib/prime.rb
@@ -273,6 +302,37 @@ class Prime
   # Returns the singleton instance.
   #
   def self.instance: () -> Prime
+
+  # Exact Rational Bernoulli number calculator.
+  class Bernoulli
+    def initialize: () -> void
+
+    include Enumerable[Rational]
+
+    def []: (Integer order) -> Rational
+
+    def upto: (Integer order) -> Array[Rational]
+
+    def each: () { (Rational) -> void } -> void
+          | () -> Enumerator[Rational, Rational]
+
+    def von_staudt_clausen_terms: (Integer order) -> Array[Rational]
+
+    def von_staudt_clausen_valid?: (Integer order) -> bool
+
+  end
+
+  # Exact Rational Faulhaber power-sum calculator.
+  class Faulhaber
+    def initialize: (?Bernoulli bernoulli_numbers) -> void
+
+    def sum: (Integer power, Integer upper) -> Rational
+
+    def power_sum: (Integer power, Integer lower, ?Integer? upper) -> Rational
+              | (Integer power, Range[Integer]) -> Rational
+
+    def range_sum: (Integer power, Range[Integer]) -> Rational
+  end
 
   # <!-- rdoc-file=lib/prime.rb -->
   # An abstract class for enumerating pseudo-prime numbers.
