@@ -326,6 +326,184 @@ class Prime
     pv
   end
 
+  # Returns the +n+th Bernoulli number B_n as an exact Rational.
+  #
+  # The Bernoulli numbers are defined by the generating function
+  #
+  #   x / (exp(x) - 1) = sum_{n>=0} B_n * x**n / n!
+  #
+  # which fixes the sign convention B_1 = -1/2.  With this convention
+  # every Bernoulli number of odd order greater than 1 is zero.
+  #
+  # All arithmetic is exact rational arithmetic; no floating point
+  # value is involved at any point.
+  #
+  # == Parameters
+  # +n+:: A non-negative Integer.
+  #
+  # == Example
+  #   Prime.bernoulli(0)   #=> (1/1)
+  #   Prime.bernoulli(1)   #=> (-1/2)
+  #   Prime.bernoulli(2)   #=> (1/6)
+  #   Prime.bernoulli(12)  #=> (-691/2730)
+  #
+  # See Prime::Bernoulli for generating a whole run of orders at once
+  # while reusing the intermediate results.
+  def bernoulli(n)
+    Bernoulli.instance[n]
+  end
+
+  # Returns the power sum of +power+-th powers as an exact Rational,
+  # computed with Faulhaber's formula from the exact Bernoulli numbers
+  # (see Prime#bernoulli).  No floating point value is involved.
+  #
+  # == Parameters
+  # +power+:: A non-negative Integer exponent.
+  # +bound+:: Either an Integer +n+, meaning the sum
+  #
+  #             1**power + 2**power + ... + n**power
+  #
+  #           where the upper end +n+ is *included* (the sum is 0 when
+  #           +n+ < 1), or a Range of Integers +first..last+ /
+  #           +first...last+, meaning the sum of +k**power+ over every
+  #           +k+ in the range.  An exclusive range excludes its end,
+  #           as usual.  Range endpoints may be negative; an empty
+  #           range sums to 0.
+  #
+  # == Example
+  #   Prime.faulhaber(1, 10)      #=> (55/1),   1 + 2 + ... + 10
+  #   Prime.faulhaber(2, 10)      #=> (385/1),  1**2 + 2**2 + ... + 10**2
+  #   Prime.faulhaber(2, 1..10)   #=> (385/1),  same as above
+  #   Prime.faulhaber(2, 1...10)  #=> (285/1),  10**2 is excluded
+  #   Prime.faulhaber(2, -3..-1)  #=> (14/1),   (-3)**2 + (-2)**2 + (-1)**2
+  #   Prime.faulhaber(2, 5..2)    #=> (0/1),    empty range
+  def faulhaber(power, bound)
+    unless power.is_a?(Integer) && power >= 0
+      raise ArgumentError, "power must be a non-negative integer, got #{power.inspect}"
+    end
+    first, last =
+      case bound
+      when Integer
+        [1, bound]
+      when Range
+        unless bound.begin.is_a?(Integer) && bound.end.is_a?(Integer)
+          raise ArgumentError, "range endpoints must be integers, got #{bound.inspect}"
+        end
+        [bound.begin, bound.exclude_end? ? bound.end - 1 : bound.end]
+      else
+        raise ArgumentError, "bound must be an Integer or a Range of integers, got #{bound.inspect}"
+      end
+    return Rational(0, 1) if last < first
+    return Rational(last - first + 1, 1) if power.zero?
+
+    bernoulli = Bernoulli.instance.upto(power)
+    # Faulhaber's formula (with the B_1 = -1/2 convention):
+    #   1**p + ... + n**p = 1/(p+1) * sum_{j=0}^{p} C(p+1, j) * B_j * (n+1)**(p+1-j)
+    # evaluated here as a polynomial in +n+, which stays exact for any
+    # integer +n+, including negative ones.
+    prefix = lambda do |n|
+      x = n + 1
+      sum = Rational(0, 1)
+      binom = 1
+      0.upto(power) do |j|
+        sum += binom * bernoulli[j] * x**(power + 1 - j)
+        binom = binom * (power + 1 - j) / (j + 1)
+      end
+      sum / (power + 1)
+    end
+    prefix.call(last) - prefix.call(first - 1)
+  end
+
+  # Exact Bernoulli number generator.
+  #
+  # Computes Bernoulli numbers as exact Rational values and caches every
+  # intermediate result, so generating up to a given order once makes all
+  # lower orders available at no extra cost.
+  #
+  # The sign convention is B_1 = -1/2 (see Prime#bernoulli).
+  #
+  # Every Bernoulli number of even order is checked against the
+  # denominator predicted by the von Staudt-Clausen theorem (see
+  # #von_staudt_clausen_denominator) before it is stored.
+  #
+  # == Example
+  #   generator = Prime::Bernoulli.instance
+  #   generator.upto(4)  #=> [(1/1), (-1/2), (1/6), (0/1), (-1/30)]
+  #   generator[4]       #=> (-1/30), reused from the cache
+  class Bernoulli
+    include Singleton
+
+    def initialize # :nodoc:
+      @numbers = [Rational(1, 1)]
+    end
+
+    # Returns the +n+th Bernoulli number B_n as a Rational, computing
+    # and caching every order up to +n+ first if necessary.
+    #
+    # +n+ must be a non-negative Integer.
+    def [](n)
+      compute_upto(check_order(n))
+      @numbers[n]
+    end
+
+    # Returns an array of the Bernoulli numbers B_0, B_1, ..., B_n as
+    # Rational values, computing and caching every order up to +n+
+    # first if necessary.
+    #
+    # +n+ must be a non-negative Integer.
+    def upto(n)
+      compute_upto(check_order(n))
+      @numbers[0..n]
+    end
+
+    # Returns the denominator of B_n for a positive even +n+ as
+    # predicted by the von Staudt-Clausen theorem: the product of all
+    # primes +p+ such that (+p+ - 1) divides +n+.
+    def von_staudt_clausen_denominator(n)
+      unless n.is_a?(Integer) && n > 0 && n.even?
+        raise ArgumentError, "order must be a positive even integer, got #{n.inspect}"
+      end
+      denominator = 1
+      Prime.each(n + 1) do |prime|
+        denominator *= prime if n % (prime - 1) == 0
+      end
+      denominator
+    end
+
+    private
+
+    def check_order(n)
+      unless n.is_a?(Integer) && n >= 0
+        raise ArgumentError, "order must be a non-negative integer, got #{n.inspect}"
+      end
+      n
+    end
+
+    def compute_upto(n)
+      compute_next(@numbers.size) while @numbers.size <= n
+    end
+
+    # B_m = -1/(m+1) * sum_{k=0}^{m-1} C(m+1, k) * B_k, with B_0 = 1.
+    def compute_next(m)
+      number =
+        if m.odd? && m > 1
+          Rational(0, 1)
+        else
+          sum = Rational(0, 1)
+          binom = 1
+          0.upto(m - 1) do |k|
+            sum += binom * @numbers[k]
+            binom = binom * (m + 1 - k) / (k + 1)
+          end
+          -sum / (m + 1)
+        end
+      if m.even? && m > 0 && number.denominator != von_staudt_clausen_denominator(m)
+        raise "B_#{m} failed the von Staudt-Clausen denominator check"
+      end
+      @numbers << number
+    end
+  end
+
   # An abstract class for enumerating pseudo-prime numbers.
   #
   # Concrete subclasses should override succ, next, rewind.

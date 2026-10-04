@@ -40,6 +40,18 @@ Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
 ```
 
+Exact Bernoulli numbers (Rational values, B_1 = -1/2 convention) and
+Faulhaber power sums (upper end included):
+
+```ruby
+Prime.bernoulli(2)        #=> (1/6)
+Prime.bernoulli(12)       #=> (-691/2730)
+Prime::Bernoulli.instance.upto(4)  #=> [(1/1), (-1/2), (1/6), (0/1), (-1/30)]
+
+Prime.faulhaber(2, 10)    #=> (385/1), 1**2 + 2**2 + ... + 10**2
+Prime.faulhaber(2, 1..10) #=> (385/1), same as above
+```
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/ruby/prime.

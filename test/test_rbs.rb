@@ -59,6 +59,68 @@ module RBSTypeTest
     end
   end
 
+  class PrimeBernoulliSingletonTest < Test::Unit::TestCase
+    include RBS::UnitTest::TypeAssertions
+
+    library "singleton", "prime"
+    testing "singleton(::Prime)"
+
+    def test_bernoulli
+      assert_send_type "(::Integer) -> ::Rational",
+                       Prime, :bernoulli, 12
+    end
+
+    def test_faulhaber
+      assert_send_type "(::Integer, ::Integer) -> ::Rational",
+                       Prime, :faulhaber, 2, 10
+      assert_send_type "(::Integer, ::Range[::Integer]) -> ::Rational",
+                       Prime, :faulhaber, 2, 1..10
+      assert_send_type "(::Integer, ::Range[::Integer]) -> ::Rational",
+                       Prime, :faulhaber, 2, -3...10
+    end
+  end
+
+  class PrimeBernoulliInstanceTest < Test::Unit::TestCase
+    include RBS::UnitTest::TypeAssertions
+
+    library "singleton", "prime"
+    testing "::Prime"
+
+    def test_bernoulli
+      assert_send_type "(::Integer) -> ::Rational",
+                       Prime.instance, :bernoulli, 12
+    end
+
+    def test_faulhaber
+      assert_send_type "(::Integer, ::Integer) -> ::Rational",
+                       Prime.instance, :faulhaber, 2, 10
+      assert_send_type "(::Integer, ::Range[::Integer]) -> ::Rational",
+                       Prime.instance, :faulhaber, 2, 1..10
+    end
+  end
+
+  class BernoulliTest < Test::Unit::TestCase
+    include RBS::UnitTest::TypeAssertions
+
+    library "singleton", "prime"
+    testing "::Prime::Bernoulli"
+
+    def test_aref
+      assert_send_type "(::Integer) -> ::Rational",
+                       Prime::Bernoulli.instance, :[], 6
+    end
+
+    def test_upto
+      assert_send_type "(::Integer) -> ::Array[::Rational]",
+                       Prime::Bernoulli.instance, :upto, 6
+    end
+
+    def test_von_staudt_clausen_denominator
+      assert_send_type "(::Integer) -> ::Integer",
+                       Prime::Bernoulli.instance, :von_staudt_clausen_denominator, 12
+    end
+  end
+
   class PrimeInstanceTest < Test::Unit::TestCase
     include RBS::UnitTest::TypeAssertions
 
