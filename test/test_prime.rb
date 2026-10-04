@@ -147,6 +147,60 @@ class TestPrime < Test::Unit::TestCase
     assert_equal Prime.prime?(4), false
   end
 
+  def test_binomial_mod_small_integers
+    0.upto(25) do |n|
+      0.upto(n) do |k|
+        1.upto(120) do |modulus|
+          exact = 1.upto(k).inject(1) {|result, i| result * (n - k + i) / i}
+          assert_equal exact % modulus, Prime.binomial_mod(n, k, modulus)
+          assert_equal exact % modulus, Prime.instance.binomial_mod(n, n - k, modulus)
+        end
+      end
+    end
+  end
+
+  def test_binomial_mod_with_prime_factors_in_factorials
+    assert_equal 0, Prime.binomial_mod(10, 3, 8)
+    assert_equal 4, Prime.binomial_mod(8, 2, 8)
+    assert_equal 4, Prime.binomial_mod(20, 10, 24)
+    assert_equal 90, Prime.binomial_mod(100, 20, 120)
+  end
+
+  def test_binomial_mod_large_n_with_small_modulus
+    n = 10**10_000 + 1
+    expected = ((n - 1) / 2 % 360) * (n % 360) % 360
+
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    result = Prime.binomial_mod(n, 2, 360)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+
+    assert_equal expected, result
+    assert_operator elapsed, :<, 1
+  end
+
+  def test_binomial_mod_large_n_and_k
+    exponent = 10_000
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    result = Prime.binomial_mod(2**(exponent + 1), 2**exponent, 8)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+
+    assert_equal 6, result
+    assert_operator elapsed, :<, 1
+  end
+
+  def test_binomial_mod_arguments
+    assert_equal 1, Prime.binomial_mod(0, 0, 6)
+    assert_equal 1, Prime.binomial_mod(20, 0, 6)
+    assert_equal 0, Prime.binomial_mod(5, 6, 6)
+    assert_equal 0, Prime.binomial_mod(20, 10, 1)
+
+    assert_raise(ArgumentError) { Prime.binomial_mod(-1, 0, 6) }
+    assert_raise(ArgumentError) { Prime.binomial_mod(10, -1, 6) }
+    assert_raise(ArgumentError) { Prime.binomial_mod(10, 2, 0) }
+    assert_raise(ArgumentError) { Prime.binomial_mod(10, 2, -6) }
+    assert_raise(ArgumentError) { Prime.binomial_mod(10.0, 2, 6) }
+  end
+
   class TestPseudoPrimeGenerator < Test::Unit::TestCase
     def test_upper_bound
       pseudo_prime_generator = Prime::PseudoPrimeGenerator.new(42)

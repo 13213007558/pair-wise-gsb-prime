@@ -326,6 +326,180 @@ class Prime
     pv
   end
 
+  # Returns the binomial coefficient C(+n+, +k+) modulo +modulus+.
+  #
+  # Unlike computing the full binomial coefficient first and then taking
+  # its remainder, this method factorizes +modulus+, computes the result
+  # for each prime power in the factorization, and combines those residues
+  # with the Chinese Remainder Theorem. Factors of the factorial denominators
+  # are tracked separately, so non-invertible denominators are never used.
+  #
+  # +n+ and +k+ may be very large non-negative integers. +modulus+ should be a
+  # small positive integer so that its prime powers are inexpensive to build.
+  #
+  # Returns 0 when +k+ is outside the range 0..+n+.
+  #
+  # === Exceptions
+  # +ArgumentError+:: when an argument is not a non-negative integer,
+  #                   or when +modulus+ is not a positive integer.
+  #
+  # == Example
+  #   Prime.binomial_mod(10, 3, 8)  #=> 0
+  #
+  def binomial_mod(n, k, modulus)
+    unless n.is_a?(Integer) && n >= 0 && k.is_a?(Integer) && k >= 0
+      raise ArgumentError, "expected non-negative integers for n and k, got #{n.inspect} and #{k.inspect}"
+    end
+    unless modulus.is_a?(Integer) && modulus >= 1
+      raise ArgumentError, "expected a positive integer modulus, got #{modulus.inspect}"
+    end
+
+    return 0 if modulus == 1 || k > n
+
+    k = [k, n - k].min
+    factors = Prime.prime_division(modulus)
+    residues = factors.map do |prime, exponent|
+      Prime.send(:binomial_mod_prime_power, n, k, prime, exponent)
+    end
+    prime_powers = factors.map {|prime, exponent| prime ** exponent}
+
+    Prime.send(:combine_prime_power_residues, residues, prime_powers)
+  end
+
+  class << self
+    private
+
+    def binomial_mod_prime_power(n, k, prime, exponent)
+      prime_power = prime ** exponent
+      n_digits = n.digits(prime)
+      k_digits = k.digits(prime)
+      nk_digits = (n - k).digits(prime)
+      p_exponent = binomial_prime_exponent(prime, n_digits, k_digits, nk_digits)
+      return 0 if p_exponent >= exponent
+
+      prefix = factorial_unit_prefix(prime, prime_power)
+      numerator_unit = factorial_unit_parts(prime, prime_power, prefix, n_digits)
+      k_unit = factorial_unit_parts(prime, prime_power, prefix, k_digits)
+      nk_unit = factorial_unit_parts(prime, prime_power, prefix, nk_digits)
+
+      denominator_unit = k_unit * nk_unit % prime_power
+      unit = numerator_unit * modular_inverse(denominator_unit, prime_power) % prime_power
+
+      unit * prime.pow(p_exponent, prime_power) % prime_power
+    end
+
+    def binomial_prime_exponent(prime, n_digits, k_digits, nk_digits)
+      length = n_digits.length
+      carry = 0
+      exponent = 0
+
+      length.times do |index|
+        total = digit_at(k_digits, index) + digit_at(nk_digits, index) + carry
+        carry, = total.divmod(prime)
+        exponent += carry
+      end
+
+      raise ArgumentError, "expected k to be within 0..n" unless carry.zero?
+      exponent
+    end
+
+    def digit_at(digits, index)
+      digits[index] || 0
+    end
+
+    def factorial_unit_prefix(prime, prime_power)
+      prefix = [1] * prime_power
+      (1...prime_power).each do |number|
+        prefix[number] = prefix[number - 1]
+        next if number % prime == 0
+        prefix[number] = prefix[number] * number % prime_power
+      end
+      prefix
+    end
+
+    def factorial_unit_parts(prime, prime_power, prefix, digits)
+      unit = 1
+      shift = exponent_of(prime_power, prime)
+      current = number_from_digits(digits[0, shift], prime)
+      parity = suffix_parity(digits, prime)
+      block_sign = prefix.last == prime_power - 1
+
+      digits.each_with_index do |_, index|
+        unit = unit * prefix[current] % prime_power
+        if block_sign && block_count_is_odd?(digits, parity, prime, index, shift)
+          unit = -unit % prime_power
+        end
+        next if index >= digits.length - 1
+
+        current /= prime
+        if index + shift < digits.length
+          current += digits[index + shift] * (prime_power / prime)
+        end
+        current %= prime_power
+      end
+
+      unit
+    end
+
+    def number_from_digits(digits, prime)
+      digits.reverse_each.inject(0) {|number, digit| number * prime + digit}
+    end
+
+    def suffix_parity(digits, prime)
+      parity = [0] * (digits.length + 1)
+      return parity if prime == 2
+
+      (digits.length - 1).downto(0) do |index|
+        parity[index] = (parity[index + 1] + digits[index]) % 2
+      end
+      parity
+    end
+
+    def block_count_is_odd?(digits, parity, prime, index, shift)
+      start = index + shift
+      return false if start >= digits.length
+      return digits[start].odd? if prime == 2
+      parity[start] == 1
+    end
+
+    def exponent_of(prime_power, prime)
+      exponent = 0
+      while prime_power > 1
+        prime_power /= prime
+        exponent += 1
+      end
+      exponent
+    end
+
+    def combine_prime_power_residues(residues, prime_powers)
+      result = 0
+      combined_modulus = 1
+
+      residues.zip(prime_powers).each do |residue, prime_power|
+        difference = (residue - result) % prime_power
+        multiplier = difference * modular_inverse(combined_modulus % prime_power, prime_power) % prime_power
+        result += combined_modulus * multiplier
+        combined_modulus *= prime_power
+        result %= combined_modulus
+      end
+
+      result
+    end
+
+    def modular_inverse(number, modulus)
+      inverse = extended_greatest_common_divisor(number, modulus).first
+      inverse % modulus
+    end
+
+    def extended_greatest_common_divisor(number, modulus)
+      return [0, 1] if number == 0
+
+      quotient, remainder = modulus.divmod(number)
+      coefficient, next_coefficient = extended_greatest_common_divisor(remainder, number)
+      [next_coefficient - quotient * coefficient, coefficient]
+    end
+  end
+
   # An abstract class for enumerating pseudo-prime numbers.
   #
   # Concrete subclasses should override succ, next, rewind.

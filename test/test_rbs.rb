@@ -43,6 +43,11 @@ module RBSTypeTest
                        Prime, :int_from_prime_division, [[-4, -2]]
     end
 
+    def test_binomial_mod
+      assert_send_type "(::Integer, ::Integer, ::Integer) -> ::Integer",
+                       Prime, :binomial_mod, 10, 3, 8
+    end
+
     def test_prime?
       assert_send_type "(::Integer) -> bool",
                        Prime, :prime?, 57
@@ -89,6 +94,11 @@ module RBSTypeTest
                        Prime.instance, :int_from_prime_division, [[3, 1], [19, 1]]
       assert_send_type "(::Array[[ ::Integer, ::Integer ]]) -> ::Rational",
                        Prime.instance, :int_from_prime_division, [[-4, -2]]
+    end
+
+    def test_binomial_mod
+      assert_send_type "(::Integer, ::Integer, ::Integer) -> ::Integer",
+                       Prime.instance, :binomial_mod, 10, 3, 8
     end
 
     def test_prime?

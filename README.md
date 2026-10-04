@@ -38,6 +38,10 @@ Prime.prime?(7)           #=> true
 Prime.prime_division(8959)                          #=> [[17, 2], [31, 1]]
 Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
+
+# Binomial coefficients modulo a composite number
+Prime.binomial_mod(10, 3, 8)                        #=> 0
+Prime.binomial_mod(20, 10, 24)                      #=> 4
 ```
 
 ## Contributing

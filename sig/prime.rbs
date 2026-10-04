@@ -136,6 +136,10 @@ class Prime
   #
   def self.int_from_prime_division: (Array[[ Integer, Integer ]]) -> (Integer | Rational)
 
+  # Returns the binomial coefficient C(n, k) modulo a positive integer modulus.
+  #
+  def self.binomial_mod: (Integer n, Integer k, Integer modulus) -> Integer
+
   # <!--
   #   rdoc-file=lib/prime.rb
   #   - int_from_prime_division(pd)
@@ -161,6 +165,10 @@ class Prime
   #     3**2 * 5                                         #=> 45
   #
   def int_from_prime_division: (Array[[ Integer, Integer ]]) -> (Integer | Rational)
+
+  # Returns the binomial coefficient C(n, k) modulo a positive integer modulus.
+  #
+  def binomial_mod: (Integer n, Integer k, Integer modulus) -> Integer
 
   # <!--
   #   rdoc-file=lib/prime.rb
