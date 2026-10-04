@@ -38,6 +38,9 @@ Prime.prime?(7)           #=> true
 Prime.prime_division(8959)                          #=> [[17, 2], [31, 1]]
 Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
+
+# All representations as a sum of two squares of non-negative integers
+Prime.sum_of_two_squares(325)   #=> [[1, 18], [6, 17], [10, 15]]
 ```
 
 ## Contributing

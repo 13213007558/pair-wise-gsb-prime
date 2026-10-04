@@ -270,6 +270,74 @@ class Prime
   #
   def prime_division: (Integer, ?PseudoPrimeGenerator generator) -> Array[[ Integer, Integer ]]
 
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - sum_of_two_squares(n)
+  # -->
+  # Returns all representations of `n` as a sum of two squares of non-negative
+  # integers.
+  #
+  # Each representation is returned as a pair `[a, b]` of non-negative integers
+  # with a <= b and a**2 + b**2 == n. The pairs are sorted in ascending order.
+  #
+  # The representations are derived from the prime factorization of `n` (see
+  # Prime#prime_division): primes p == 1 (mod 4) are split in the Gaussian
+  # integers via Cornacchia's algorithm, and the products of the resulting
+  # Gaussian factors enumerate the representations. Therefore the running time
+  # depends on the prime factors of `n`, not on the magnitude of `n` itself;
+  # no search over the range 0..sqrt(n) is performed.
+  #
+  # By Fermat's theorem on sums of two squares, `n` has such a representation
+  # if and only if every prime factor q == 3 (mod 4) occurs with an even
+  # exponent; otherwise an empty array is returned.
+  #
+  # ## Parameters
+  # `n`
+  # :   An arbitrary integer.
+  #
+  #
+  # ## Example
+  #
+  #     Prime.sum_of_two_squares(50)   #=> [[1, 7], [5, 5]]
+  #     Prime.sum_of_two_squares(325)  #=> [[1, 18], [6, 17], [10, 15]]
+  #     Prime.sum_of_two_squares(3)    #=> []
+  #
+  def self.sum_of_two_squares: (Integer n) -> Array[[ Integer, Integer ]]
+
+  # <!--
+  #   rdoc-file=lib/prime.rb
+  #   - sum_of_two_squares(n)
+  # -->
+  # Returns all representations of `n` as a sum of two squares of non-negative
+  # integers.
+  #
+  # Each representation is returned as a pair `[a, b]` of non-negative integers
+  # with a <= b and a**2 + b**2 == n. The pairs are sorted in ascending order.
+  #
+  # The representations are derived from the prime factorization of `n` (see
+  # Prime#prime_division): primes p == 1 (mod 4) are split in the Gaussian
+  # integers via Cornacchia's algorithm, and the products of the resulting
+  # Gaussian factors enumerate the representations. Therefore the running time
+  # depends on the prime factors of `n`, not on the magnitude of `n` itself;
+  # no search over the range 0..sqrt(n) is performed.
+  #
+  # By Fermat's theorem on sums of two squares, `n` has such a representation
+  # if and only if every prime factor q == 3 (mod 4) occurs with an even
+  # exponent; otherwise an empty array is returned.
+  #
+  # ## Parameters
+  # `n`
+  # :   An arbitrary integer.
+  #
+  #
+  # ## Example
+  #
+  #     Prime.sum_of_two_squares(50)   #=> [[1, 7], [5, 5]]
+  #     Prime.sum_of_two_squares(325)  #=> [[1, 18], [6, 17], [10, 15]]
+  #     Prime.sum_of_two_squares(3)    #=> []
+  #
+  def sum_of_two_squares: (Integer n) -> Array[[ Integer, Integer ]]
+
   # Returns the singleton instance.
   #
   def self.instance: () -> Prime

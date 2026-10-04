@@ -147,6 +147,78 @@ class TestPrime < Test::Unit::TestCase
     assert_equal Prime.prime?(4), false
   end
 
+  def test_sum_of_two_squares_no_representation
+    # Fermat: a prime factor q == 3 (mod 4) with an odd exponent
+    # makes a representation impossible.
+    assert_equal [], Prime.sum_of_two_squares(3)
+    assert_equal [], Prime.sum_of_two_squares(12)  # 2**2 * 3
+    assert_equal [], Prime.sum_of_two_squares(21)  # 3 * 7
+    assert_equal [], Prime.sum_of_two_squares(63)  # 3**2 * 7
+    assert_equal [], Prime.sum_of_two_squares(-4)
+  end
+
+  def test_sum_of_two_squares_axis_representations
+    assert_equal [[0, 0]], Prime.sum_of_two_squares(0)
+    assert_equal [[0, 1]], Prime.sum_of_two_squares(1)
+    assert_equal [[0, 2]], Prime.sum_of_two_squares(4)
+    assert_equal [[0, 3]], Prime.sum_of_two_squares(9)
+    assert_equal [[0, 5], [3, 4]], Prime.sum_of_two_squares(25)
+  end
+
+  def test_sum_of_two_squares_multiple_representations
+    assert_equal [[1, 1]], Prime.sum_of_two_squares(2)
+    assert_equal [[1, 7], [5, 5]], Prime.sum_of_two_squares(50)
+    assert_equal [[1, 8], [4, 7]], Prime.sum_of_two_squares(65)
+    assert_equal [[1, 18], [6, 17], [10, 15]], Prime.sum_of_two_squares(325)
+    assert_equal [[4, 33], [9, 32], [12, 31], [23, 24]], Prime.sum_of_two_squares(1105)
+  end
+
+  def test_sum_of_two_squares_no_duplicate_representations
+    # 5**4: the 5 choices of Gaussian factors collapse to 3 pairs
+    # because conjugates and units normalize to the same pair.
+    assert_equal [[0, 25], [7, 24], [15, 20]], Prime.sum_of_two_squares(625)
+  end
+
+  def test_sum_of_two_squares_exhaustive
+    0.upto(1000) do |n|
+      expected = []
+      (0..Integer.sqrt(n)).each do |a|
+        b = Integer.sqrt(n - a * a)
+        expected << [a, b] if a <= b && b * b == n - a * a
+      end
+      assert_equal expected, Prime.sum_of_two_squares(n), "n=#{n}"
+    end
+  end
+
+  def test_sum_of_two_squares_large_prime_factors
+    p1 = 10_000_121 # prime, == 1 (mod 4)
+    p2 = 10_000_141 # prime, == 1 (mod 4)
+    p3 = 10_000_019 # prime, == 3 (mod 4)
+    assert p1.prime? && p1 % 4 == 1
+    assert p2.prime? && p2 % 4 == 1
+    assert p3.prime? && p3 % 4 == 3
+
+    # The answers are derived from the prime factorization; scanning
+    # 0..Integer.sqrt(n) for p1**8 (~10**56) would not terminate in time.
+    Timeout.timeout(30) do
+      reps = Prime.sum_of_two_squares(p1**8)
+      assert_equal 5, reps.size
+      reps.each do |a, b|
+        assert_operator a, :<=, b
+        assert_equal p1**8, a * a + b * b
+      end
+
+      reps = Prime.sum_of_two_squares(p1 * p2)
+      assert_equal 2, reps.size
+      assert reps.all? {|a, b| a <= b && a * a + b * b == p1 * p2 }
+
+      assert_equal [[1261, 2900]], Prime.sum_of_two_squares(p1)
+      assert_equal [], Prime.sum_of_two_squares(p3)
+      assert_equal [], Prime.sum_of_two_squares(p1 * p3)
+      assert_equal [[0, p3]], Prime.sum_of_two_squares(p3 * p3)
+    end
+  end
+
   class TestPseudoPrimeGenerator < Test::Unit::TestCase
     def test_upper_bound
       pseudo_prime_generator = Prime::PseudoPrimeGenerator.new(42)

@@ -326,6 +326,86 @@ class Prime
     pv
   end
 
+  # Returns all representations of +n+ as a sum of two squares of
+  # non-negative integers.
+  #
+  # Each representation is returned as a pair <code>[a, b]</code> of
+  # non-negative integers with a <= b and a**2 + b**2 == n.  The pairs
+  # are sorted in ascending order.
+  #
+  # The representations are derived from the prime factorization of +n+
+  # (see Prime#prime_division): primes p == 1 (mod 4) are split in the
+  # Gaussian integers via Cornacchia's algorithm, and the products of the
+  # resulting Gaussian factors enumerate the representations.  Therefore
+  # the running time depends on the prime factors of +n+, not on the
+  # magnitude of +n+ itself; no search over the range 0..sqrt(n) is
+  # performed.
+  #
+  # By Fermat's theorem on sums of two squares, +n+ has such a
+  # representation if and only if every prime factor q == 3 (mod 4)
+  # occurs with an even exponent; otherwise an empty array is returned.
+  #
+  # == Parameters
+  # +n+:: An arbitrary integer.
+  #
+  # == Example
+  #
+  #   Prime.sum_of_two_squares(50)   #=> [[1, 7], [5, 5]]
+  #   Prime.sum_of_two_squares(325)  #=> [[1, 18], [6, 17], [10, 15]]
+  #   Prime.sum_of_two_squares(3)    #=> []
+  #
+  def sum_of_two_squares(n)
+    raise ArgumentError, "Expected an integer, got #{n}" unless n.is_a?(Integer)
+    return [] if n < 0
+    return [[0, 0]] if n.zero?
+
+    # Gaussian integers are represented as [re, im] pairs.
+    multiply = ->(z, w) { [z[0]*w[0] - z[1]*w[1], z[0]*w[1] + z[1]*w[0]] }
+
+    # Cornacchia's algorithm: for a prime p == 1 (mod 4), returns [u, v]
+    # with u**2 + v**2 == p.
+    split_prime = ->(p) {
+      # If d is a quadratic non-residue modulo p, then
+      # x = d**((p-1)/4) mod p satisfies x**2 == -1 (mod p).
+      d = 2
+      d += 1 while d.pow((p - 1) / 2, p) != p - 1
+      # The Euclidean algorithm started from (p, x) reaches u as the
+      # first remainder below sqrt(p), and p - u**2 is a perfect square.
+      r0, r1 = p, d.pow((p - 1) / 4, p)
+      r0, r1 = r1, r0 % r1 while r1 * r1 >= p
+      [r1, Integer.sqrt(p - r1 * r1)]
+    }
+
+    base = [1, 0]      # product of the factors of 2 and of primes 3 (mod 4)
+    choices = [[1, 0]] # products over the split primes 1 (mod 4)
+    prime_division(n).each do |p, e|
+      case p % 4
+      when 2 # p == 2: 2 = -i * (1 + i)**2
+        e.times { base = multiply.(base, [1, 1]) }
+      when 3
+        return [] if e.odd?
+        base = [base[0] * p**(e / 2), base[1] * p**(e / 2)]
+      else
+        u, v = split_prime.(p)
+        # p**e = (u + iv)**k * (u - iv)**(e-k) for k = 0..e, up to units.
+        plus, minus = [[1, 0]], [[1, 0]]
+        e.times do
+          plus << multiply.(plus[-1], [u, v])
+          minus << multiply.(minus[-1], [u, -v])
+        end
+        terms = (0..e).map { |k| multiply.(plus[k], minus[e - k]) }
+        choices = choices.product(terms).map { |z, t| multiply.(z, t) }
+      end
+    end
+
+    pairs = {}
+    choices.each do |z|
+      a, b = multiply.(z, base).map!(&:abs).sort!
+      pairs[[a, b]] = true
+    end
+    pairs.keys.sort!
+  end
+
   # An abstract class for enumerating pseudo-prime numbers.
   #
   # Concrete subclasses should override succ, next, rewind.
