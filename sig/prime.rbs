@@ -270,6 +270,50 @@ class Prime
   #
   def prime_division: (Integer, ?PseudoPrimeGenerator generator) -> Array[[ Integer, Integer ]]
 
+  class BinaryQuadraticForm
+    include Comparable
+
+    attr_reader a: Integer
+    attr_reader b: Integer
+    attr_reader c: Integer
+    attr_reader discriminant: Integer
+
+    def self.fundamental_discriminant?: (untyped discriminant) -> bool
+
+    def self.fundamental_discriminant_error: (untyped discriminant) -> String?
+
+    def self.forms: (Integer discriminant) -> Array[BinaryQuadraticForm]
+
+    def self.each: (Integer discriminant) { (BinaryQuadraticForm) -> void } -> void
+                | (Integer discriminant) -> Enumerator[BinaryQuadraticForm, Array[BinaryQuadraticForm]]
+
+    def self.identity: (Integer discriminant) -> BinaryQuadraticForm
+
+    def self.canonical: (Integer a, Integer b, Integer c) -> BinaryQuadraticForm
+
+    def initialize: (Integer a, Integer b, Integer c) -> void
+
+    def compose: (BinaryQuadraticForm other) -> BinaryQuadraticForm
+
+    def inverse: () -> BinaryQuadraticForm
+
+    def identity?: () -> bool
+
+    def to_a: () -> [ Integer, Integer, Integer ]
+
+    def ==: (untyped other) -> bool
+
+    def hash: () -> Integer
+
+    def <=>: (untyped other) -> Integer?
+
+    def inspect: () -> String
+
+    def to_s: () -> String
+
+    alias * compose
+  end
+
   # Returns the singleton instance.
   #
   def self.instance: () -> Prime

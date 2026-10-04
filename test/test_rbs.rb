@@ -101,4 +101,41 @@ module RBSTypeTest
                        Prime.instance, :prime_division, 57
     end
   end
+
+  class BinaryQuadraticFormSingletonTest < Test::Unit::TestCase
+    include RBS::UnitTest::TypeAssertions
+
+    library "singleton", "prime"
+    testing "singleton(::Prime::BinaryQuadraticForm)"
+
+    def test_class_api
+      assert_send_type "(untyped) -> bool",
+                       Prime::BinaryQuadraticForm, :fundamental_discriminant?, -23
+      assert_send_type "(untyped) -> ::String?",
+                       Prime::BinaryQuadraticForm, :fundamental_discriminant_error, -23
+      assert_send_type "(::Integer) -> ::Array[::Prime::BinaryQuadraticForm]",
+                       Prime::BinaryQuadraticForm, :forms, -23
+      assert_send_type "(::Integer) -> ::Prime::BinaryQuadraticForm",
+                       Prime::BinaryQuadraticForm, :identity, -23
+    end
+  end
+
+  class BinaryQuadraticFormTest < Test::Unit::TestCase
+    include RBS::UnitTest::TypeAssertions
+
+    library "singleton", "prime"
+    testing "::Prime::BinaryQuadraticForm"
+
+    def test_instance_api
+      form = Prime::BinaryQuadraticForm.new(2, 1, 3)
+      inverse = Prime::BinaryQuadraticForm.new(2, -1, 3)
+
+      assert_send_type "(::Prime::BinaryQuadraticForm) -> ::Prime::BinaryQuadraticForm",
+                       form, :compose, inverse
+      assert_send_type "() -> ::Prime::BinaryQuadraticForm", form, :inverse
+      assert_send_type "() -> bool", form, :identity?
+      assert_send_type "() -> [ ::Integer, ::Integer, ::Integer ]", form, :to_a
+      assert_send_type "() -> ::String", form, :inspect
+    end
+  end
 end

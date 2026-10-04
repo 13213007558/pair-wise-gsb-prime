@@ -326,6 +326,257 @@ class Prime
     pv
   end
 
+  # A primitive positive definite binary quadratic form ax^2 + bxy + cy^2
+  # of a negative fundamental discriminant D = b^2 - 4ac.
+  #
+  # Constructors return the canonical reduced representative, where
+  # <tt>-a &lt; b &lt;= a</tt> and <tt>a &lt;= c</tt>. When +a+ and +c+ are
+  # equal, +b+ is non-negative. Thus on the boundary <tt>|b| = a</tt> the
+  # positive sign is canonical.
+  #
+  # Forms of the same discriminant form a finite group under Gauss
+  # composition, represented by #compose or <tt>*</tt>.
+  class BinaryQuadraticForm
+    include Comparable
+
+    attr_reader :a, :b, :c, :discriminant
+
+    # Returns true when +discriminant+ is a negative fundamental discriminant.
+    def self.fundamental_discriminant?(discriminant)
+      fundamental_discriminant_error(discriminant).nil?
+    end
+
+    # Returns nil for a negative fundamental discriminant, otherwise a String
+    # describing why the discriminant is not accepted.
+    def self.fundamental_discriminant_error(discriminant)
+      unless discriminant.is_a?(Integer)
+        return "discriminant must be an integer, got #{discriminant.inspect}"
+      end
+      return "discriminant must be negative, got #{discriminant}" if discriminant >= 0
+      unless discriminant % 4 == 0 || discriminant % 4 == 1
+        return "discriminant #{discriminant} is not congruent to 0 or 1 modulo 4"
+      end
+
+      if discriminant.odd?
+        squarefree_part = discriminant
+      else
+        squarefree_part = discriminant / 4
+        modulo = squarefree_part % 4
+        unless modulo == 2 || modulo == 3
+          return "discriminant #{discriminant} is not fundamental: " \
+                 "D/4=#{squarefree_part} is not congruent to 2 or 3 modulo 4"
+        end
+      end
+
+      unless squarefree?(squarefree_part)
+        return "discriminant #{discriminant} is not fundamental: " \
+               "#{squarefree_part} is not squarefree"
+      end
+
+      nil
+    end
+
+    # Returns all primitive reduced forms for +discriminant+ in ascending
+    # canonical order.
+    def self.forms(discriminant)
+      validate_fundamental_discriminant(discriminant)
+      forms = []
+      bound = Integer.sqrt(-discriminant / 3)
+      (1..bound).each do |a|
+        ((1 - a)..a).each do |b|
+          numerator = b * b - discriminant
+          next unless numerator.modulo(4 * a).zero?
+          c = numerator / (4 * a)
+          next if a > c || (a == c && b < 0)
+          next unless a.gcd(b).gcd(c) == 1
+          forms << new(a, b, c)
+        end
+      end
+      forms.sort
+    end
+
+    # Iterates over all primitive reduced forms for +discriminant+.
+    def self.each(discriminant, &block)
+      return enum_for(:each, discriminant) unless block
+      forms(discriminant).each(&block)
+    end
+
+    # Returns the identity class (1, b, c) for +discriminant+.
+    def self.identity(discriminant)
+      validate_fundamental_discriminant(discriminant)
+      b = discriminant.odd? ? 1 : 0
+      new(1, b, (b * b - discriminant) / 4)
+    end
+
+    # Returns the canonical reduced representative of the primitive form
+    # (a, b, c). Negating all three coefficients is also accepted.
+    def self.canonical(a, b, c)
+      new(a, b, c)
+    end
+
+    # Creates and reduces a primitive form. See BinaryQuadraticForm.canonical.
+    def initialize(a, b, c)
+      unless a.is_a?(Integer) && b.is_a?(Integer) && c.is_a?(Integer)
+        raise ArgumentError, "form coefficients must be integers"
+      end
+      raise ArgumentError, "form must be nondegenerate" if a == 0 || c == 0
+
+      discriminant = b * b - 4 * a * c
+      self.class.send(:validate_fundamental_discriminant, discriminant)
+
+      if a < 0
+        a = -a
+        b = -b
+        c = -c
+      end
+      unless a.gcd(b).gcd(c) == 1
+        raise ArgumentError, "form (#{a}, #{b}, #{c}) is not primitive"
+      end
+
+      a, b, c = self.class.send(:reduce_form, a, b, c, discriminant)
+      @a = a
+      @b = b
+      @c = c
+      @discriminant = discriminant
+    end
+
+    # Returns the Gauss composition of this form with +other+. Both forms
+    # must have the same discriminant.
+    def compose(other)
+      unless other.is_a?(BinaryQuadraticForm) && other.discriminant == discriminant
+        raise ArgumentError, "both forms must have discriminant #{discriminant}"
+      end
+
+      w = discriminant.odd? ? 1 : 0
+      middle = (b + other.b) / 2
+      product_constant = if discriminant.odd?
+        (b * other.b + discriminant - b - other.b) / 4
+      else
+        (b * other.b + discriminant) / 4
+      end
+      vectors = [
+        [a * other.a, 0],
+        [a * (other.b - w) / 2, a],
+        [other.a * (b - w) / 2, other.a],
+        [product_constant, middle]
+      ]
+      composed_a, composed_b = self.class.send(:hnf_form_coefficients, vectors, w)
+      composed_c = (composed_b * composed_b - discriminant) / (4 * composed_a)
+      self.class.new(composed_a, composed_b, composed_c)
+    end
+
+    # Returns the inverse class under Gauss composition.
+    def inverse
+      self.class.new(a, canonical_inverse_b, c)
+    end
+
+    # Returns true when this is the identity class.
+    def identity?
+      a == 1
+    end
+
+    # Returns [a, b, c].
+    def to_a
+      [a, b, c]
+    end
+
+    def ==(other)
+      other.is_a?(BinaryQuadraticForm) && to_a == other.to_a
+    end
+    alias eql? ==
+
+    def hash
+      [self.class, a, b, c].hash
+    end
+
+    def <=>(other)
+      to_a <=> other.to_a if other.is_a?(BinaryQuadraticForm)
+    end
+
+    def inspect
+      "#<#{self.class} #{inspect_form}>"
+    end
+
+    def to_s
+      inspect_form
+    end
+
+    alias * compose
+
+    private
+
+    def canonical_inverse_b
+      return 0 if b == 0
+      return b if a == c
+      return b if b == a
+      -b
+    end
+
+    def inspect_form
+      "(#{a}, #{b}, #{c})"
+    end
+
+    class << self
+      private
+
+      def validate_fundamental_discriminant(discriminant)
+        error = fundamental_discriminant_error(discriminant)
+        raise ArgumentError, error if error
+      end
+
+      def squarefree?(value)
+        Prime.prime_division(-value).all? { |_prime, exponent| exponent == 1 }
+      end
+
+      def reduce_form(a, b, c, discriminant)
+        loop do
+          if a > c || (a == c && b < 0)
+            a, b, c = c, -b, a
+          end
+          break if -a < b && b <= a
+
+          n = (b + a - 1).div(2 * a)
+          b -= 2 * a * n
+          c = (b * b - discriminant) / (4 * a)
+        end
+        [a, b, c]
+      end
+
+      def hnf_form_coefficients(vectors, omega_offset)
+        content = vectors.flatten.inject(0) { |result, value| result.gcd(value.abs) }
+        vectors = vectors.map { |x, y| [x / content, y / content] }
+
+        h22 = 0
+        determinant = 0
+        vectors.each { |_x, y| h22 = h22.gcd(y.abs) }
+        vectors.combination(2).each do |(x1, y1), (x2, y2)|
+          determinant = determinant.gcd((x1 * y2 - x2 * y1).abs)
+        end
+        h11 = determinant / h22
+
+        current_x = 0
+        current_y = 0
+        vectors.each do |x, y|
+          next if y == 0
+          gcd, left_coefficient, right_coefficient = extended_gcd(current_y, y.abs)
+          right_coefficient = -right_coefficient if y < 0
+          current_x = left_coefficient * current_x + right_coefficient * x
+          current_y = gcd
+        end
+
+        b = 2 * (current_x % h11) + omega_offset
+        [h11, b]
+      end
+
+      def extended_gcd(left, right)
+        return [left.abs, left <=> 0, 0] if right == 0
+
+        gcd, previous_x, previous_y = extended_gcd(right, left % right)
+        [gcd, previous_y, previous_x - (left / right) * previous_y]
+      end
+    end
+  end
+
   # An abstract class for enumerating pseudo-prime numbers.
   #
   # Concrete subclasses should override succ, next, rewind.
