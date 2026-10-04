@@ -15,6 +15,9 @@
 require "singleton"
 require "forwardable"
 
+require_relative "prime/binary_quadratic_form"
+require_relative "prime/quadratic_class_group"
+
 class Integer
   # Re-composes a prime factorization and returns the product.
   #

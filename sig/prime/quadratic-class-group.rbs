@@ -1,0 +1,28 @@
+class Prime
+  class QuadraticClassGroup
+    include Enumerable[Prime::BinaryQuadraticForm]
+
+    attr_reader discriminant: Integer
+
+    def self.fundamental_discriminant?: (untyped) -> bool
+    def self.non_fundamental_reason: (untyped) -> String
+
+    def initialize: (Integer) -> void
+
+    def identity: () -> Prime::BinaryQuadraticForm
+    def forms: () -> Array[Prime::BinaryQuadraticForm]
+    def class_number: () -> Integer
+    def each: () { (Prime::BinaryQuadraticForm) -> void } -> QuadraticClassGroup
+               | () -> Enumerator[Prime::BinaryQuadraticForm, untyped]
+    def []: (Integer, ?Integer?, ?Integer?) -> Prime::BinaryQuadraticForm?
+    def compose: (Prime::BinaryQuadraticForm, Prime::BinaryQuadraticForm) -> Prime::BinaryQuadraticForm
+    def inverse: (Prime::BinaryQuadraticForm) -> Prime::BinaryQuadraticForm
+    def power: (Prime::BinaryQuadraticForm, Integer) -> Prime::BinaryQuadraticForm
+    def order: (Prime::BinaryQuadraticForm) -> Integer
+    def ==: (untyped) -> bool
+    def eql?: (untyped) -> bool
+    def hash: () -> Integer
+    def inspect: () -> String
+    def to_s: () -> String
+  end
+end

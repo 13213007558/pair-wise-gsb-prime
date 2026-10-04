@@ -1,0 +1,29 @@
+class Prime
+  class BinaryQuadraticForm
+    include Comparable
+
+    attr_reader a: Integer
+    attr_reader b: Integer
+    attr_reader c: Integer
+    attr_reader discriminant: Integer
+
+    def self.reduced_form: (Integer, Integer, Integer) -> BinaryQuadraticForm
+    def self.reduced_coefficients?: (Integer, Integer, Integer, Integer) -> bool
+    def self.reduce_coefficients: (Integer, Integer, Integer, Integer) -> [Integer, Integer, Integer]
+
+    def initialize: (Integer, Integer, Integer) -> void
+
+    def reduced: () -> BinaryQuadraticForm
+    def compose: (BinaryQuadraticForm) -> BinaryQuadraticForm
+    def inverse: () -> BinaryQuadraticForm
+    def power: (Integer) -> BinaryQuadraticForm
+    def to_a: () -> [Integer, Integer, Integer]
+    def coefficients: () -> [Integer, Integer, Integer]
+    def ==: (untyped) -> bool
+    def eql?: (untyped) -> bool
+    def hash: () -> Integer
+    def <=>: (untyped) -> Integer?
+    def inspect: () -> String
+    def to_s: () -> String
+  end
+end

@@ -38,6 +38,16 @@ Prime.prime?(7)           #=> true
 Prime.prime_division(8959)                          #=> [[17, 2], [31, 1]]
 Prime.int_from_prime_division([[17, 2], [31, 1]])   #=> 8959
 17**2 * 31                                          #=> 8959
+
+# Primitive reduced binary quadratic forms of a negative fundamental
+# discriminant, with Gauss composition and inverse.
+group = Prime::QuadraticClassGroup.new(-23)
+group.class_number                       #=> 3
+group.forms.map(&:to_a)                  #=> [[1, 1, 6], [2, -1, 3], [2, 1, 3]]
+f = group[2, -1, 3]
+f * f                                    #=> Prime::BinaryQuadraticForm(2, 1, 3)
+f * f.inverse                            #=> Prime::BinaryQuadraticForm(1, 1, 6)
+Prime::QuadraticClassGroup.new(-12)      #=> ArgumentError: -12 is not fundamental: ...
 ```
 
 ## Contributing
