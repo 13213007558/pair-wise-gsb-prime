@@ -178,6 +178,10 @@ class Prime
   #
   def self.prime?: (Integer value, ?PseudoPrimeGenerator generator) -> bool
 
+  # Computes C(n, k) modulo m without constructing the full binomial coefficient.
+  #
+  def self.binomial_mod: (Integer n, Integer k, Integer m) -> Integer
+
   # <!--
   #   rdoc-file=lib/prime.rb
   #   - prime?(value, generator = Prime::Generator23.new)
@@ -193,6 +197,10 @@ class Prime
   # :   optional. A pseudo-prime generator.
   #
   def prime?: (Integer value, ?PseudoPrimeGenerator generator) -> bool
+
+  # Computes C(n, k) modulo m without constructing the full binomial coefficient.
+  #
+  def binomial_mod: (Integer n, Integer k, Integer m) -> Integer
 
   # <!--
   #   rdoc-file=lib/prime.rb

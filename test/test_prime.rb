@@ -147,6 +147,52 @@ class TestPrime < Test::Unit::TestCase
     assert_equal Prime.prime?(4), false
   end
 
+  def test_binomial_mod
+    moduli = [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16, 18, 24, 25,
+      27, 32, 36, 49, 64, 81, 120, 125, 169, 210, 343
+    ]
+
+    0.upto(40) do |n|
+      0.upto(n) do |k|
+        exact = factorial(n) / (factorial(k) * factorial(n - k))
+        moduli.each do |modulus|
+          assert_equal exact % modulus, Prime.binomial_mod(n, k, modulus)
+        end
+      end
+    end
+  end
+
+  def test_binomial_mod_with_non_invertible_denominator
+    assert_equal 7, Prime.binomial_mod(6, 2, 8)
+    assert_equal 6, Prime.binomial_mod(8, 4, 8)
+    assert_equal 0, Prime.binomial_mod(10, 3, 12)
+    assert_equal 17, Prime.binomial_mod(12, 5, 25)
+  end
+
+  def test_binomial_mod_large_values
+    n = 10 ** 10_000
+
+    Timeout.timeout(5) do
+      assert_equal 130, Prime.binomial_mod(n, 1, 210)
+      assert_equal 0, Prime.binomial_mod(n, n / 2, 6)
+    end
+  end
+
+  def test_binomial_mod_arguments
+    assert_equal 0, Prime.binomial_mod(5, 6, 7)
+    assert_raise(ArgumentError) { Prime.binomial_mod(-1, 0, 7) }
+    assert_raise(ArgumentError) { Prime.binomial_mod(1, -1, 7) }
+    assert_raise(ArgumentError) { Prime.binomial_mod(1, 0, 0) }
+    assert_raise(ArgumentError) { Prime.binomial_mod(1.0, 0, 7) }
+  end
+
+  private
+
+  def factorial(number)
+    (1..number).inject(1, :*)
+  end
+
   class TestPseudoPrimeGenerator < Test::Unit::TestCase
     def test_upper_bound
       pseudo_prime_generator = Prime::PseudoPrimeGenerator.new(42)

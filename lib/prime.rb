@@ -180,6 +180,7 @@ class Prime
 
     def method_added(method) # :nodoc:
       (class<< self;self;end).def_delegator :instance, method
+      private_class_method(method) if private_instance_methods(false).include?(method)
     end
   end
 
@@ -244,6 +245,40 @@ class Prime
       return true if q < num
       return false if r == 0
     end
+  end
+
+  # Returns the binomial coefficient C(+n+, +k+) modulo +m+.
+  #
+  # +n+ and +k+ may be large. +m+ is factorized into prime powers; the
+  # binomial coefficient is evaluated modulo each prime power separately and
+  # then combined with the Chinese remainder theorem. Factors of the relevant
+  # prime are removed from factorials, so their denominators are never
+  # inverted while non-coprime with the modulus.
+  #
+  # == Parameters
+  # +n+:: A non-negative integer.
+  # +k+:: A non-negative integer. Returns 0 when +k+ is greater than +n+.
+  # +m+:: A positive integer.
+  def binomial_mod(n, k, m)
+    unless n.is_a?(Integer) && k.is_a?(Integer) && m.is_a?(Integer) &&
+           n >= 0 && k >= 0 && m > 0
+      raise ArgumentError, "expected non-negative integers n and k and a positive integer m"
+    end
+    return 0 if k > n
+    return 0 if m == 1
+
+    k = [k, n - k].min
+    result = 0
+    modulus = 1
+
+    prime_division(m).each do |prime, exponent|
+      prime_power = prime ** exponent
+      residue = binomial_mod_prime_power(n, k, prime, exponent, prime_power)
+      result = chinese_remainder_step(result, modulus, residue, prime_power)
+      modulus *= prime_power
+    end
+
+    result
   end
 
   # Re-composes a prime factorization and returns the product.
@@ -324,6 +359,96 @@ class Prime
       pv.push [value, 1]
     end
     pv
+  end
+
+  private
+
+  def binomial_mod_prime_power(n, k, prime, exponent, prime_power)
+    prime_exponent =
+      factorial_prime_exponent(n, prime) -
+      factorial_prime_exponent(k, prime) -
+      factorial_prime_exponent(n - k, prime)
+
+    return 0 if prime_exponent >= exponent
+
+    unit_prefixes = unit_prefixes(prime, prime_power)
+    factorial_n = factorial_without_prime(n, prime, exponent, prime_power, unit_prefixes)
+    factorial_k = factorial_without_prime(k, prime, exponent, prime_power, unit_prefixes)
+    factorial_n_minus_k =
+      factorial_without_prime(n - k, prime, exponent, prime_power, unit_prefixes)
+    unit_part =
+      factorial_n * modular_inverse(factorial_k, prime_power) % prime_power *
+      modular_inverse(factorial_n_minus_k, prime_power) % prime_power
+
+    (prime ** prime_exponent) * unit_part % prime_power
+  end
+
+  def factorial_prime_exponent(number, prime)
+    (number - number.digits(prime).sum) / (prime - 1)
+  end
+
+  def unit_prefixes(prime, prime_power)
+    unit_prefixes = [1]
+    product = 1
+    (1...prime_power).each do |factor|
+      product = product * factor % prime_power unless (factor % prime).zero?
+      unit_prefixes << product
+    end
+    unit_prefixes
+  end
+
+  def factorial_without_prime(number, prime, exponent, prime_power, unit_prefixes)
+    digits = number.digits(prime)
+    quotient_parity = Array.new(digits.size + 1, 0)
+    digits.each_with_index.reverse_each do |digit, index|
+      quotient_parity[index] =
+        (quotient_parity[index + 1] * prime + digit).odd? ? 1 : 0
+    end
+
+    result = 1
+
+    digits.each_index do |level|
+      remainder = 0
+      place = 1
+      max_offset = [exponent, digits.size - level].min
+      max_offset.times do |offset|
+        remainder += digits[level + offset] * place
+        place *= prime
+      end
+      product = unit_factorial(prime, prime_power)
+      complete_blocks_even = quotient_parity.fetch(level + exponent, 0).zero?
+      product = 1 if complete_blocks_even || (prime == 2 && prime_power != 4)
+      result = result * product % prime_power
+      result = result * unit_prefixes[remainder] % prime_power
+    end
+    result
+  end
+
+  def unit_factorial(prime, prime_power)
+    return -1 if prime != 2 || prime_power == 4
+    1
+  end
+
+  def modular_inverse(number, modulus)
+    return 0 if modulus == 1
+
+    old_value = number
+    value = modulus
+    old_coefficient = 1
+    coefficient = 0
+
+    while value != 0
+      quotient, old_value = old_value.divmod(value)
+      old_value, value = value, old_value
+      old_coefficient, coefficient = coefficient, old_coefficient - quotient * coefficient
+    end
+
+    old_coefficient % modulus
+  end
+
+  def chinese_remainder_step(result, modulus, residue, prime_power)
+    delta = (residue - result) * modular_inverse(modulus % prime_power, prime_power) % prime_power
+    result + modulus * delta
   end
 
   # An abstract class for enumerating pseudo-prime numbers.
